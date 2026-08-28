@@ -113,3 +113,4 @@ create policy "authenticated write lines" on finance_sale_lines
   for insert with check (auth.role() = 'authenticated');
 create policy "authenticated update lines" on finance_sale_lines
   for update using (auth.role() = 'authenticated');
+

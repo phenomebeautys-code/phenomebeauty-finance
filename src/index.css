@@ -1,0 +1,90 @@
+:root {
+  --paper: #f6f1ea;
+  --paper-raised: #fffdfa;
+  --ink: #221a16;
+  --ink-soft: #6b5f56;
+  --line: #ddd0bf;
+  --line-strong: #b9a48c;
+  --rose: #9c3b4e;
+  --rose-soft: #f1dde0;
+  --clay: #b3762f;
+  --clay-soft: #f2e3cd;
+  --slate: #4a5a5c;
+  --slate-soft: #dfe6e6;
+  --good: #3f6b4f;
+  --good-soft: #dfe9e1;
+  --warn: #a15b1f;
+  --warn-soft: #f3e2cc;
+
+  --font-display: 'Iowan Old Style', 'Palatino Linotype', Georgia, 'Times New Roman', serif;
+  --font-body: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+html {
+  /* Stops the browser chrome flashing white when the page overscrolls. */
+  background: var(--paper);
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+#root {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 0 24px 96px;
+  padding-left: max(24px, env(safe-area-inset-left));
+  padding-right: max(24px, env(safe-area-inset-right));
+}
+
+button {
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* Inputs at 16px on touch devices stop iOS Safari zooming in on focus. */
+@media (max-width: 640px) {
+  input, select, textarea, button {
+    font-size: 16px;
+  }
+}
+
+a {
+  color: inherit;
+}
+
+::selection {
+  background: var(--rose-soft);
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--rose);
+  outline-offset: 2px;
+  border-radius: 2px;
+}

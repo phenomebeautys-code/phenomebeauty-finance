@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { LineType, PaymentMethod, SaleSource, SourceSystem } from '../lib/types'
 import { LINE_TYPE_LABELS } from '../lib/types'
 import { formatRands, randsToCents } from '../lib/money'
-import { supabase } from '../lib/supabase'
+import { supabase, isSupabaseConfigured } from '../lib/supabase'
 
 interface DraftLine {
   id: string
@@ -60,6 +60,13 @@ export function NewSale({ onSaved }: { onSaved: () => void }) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
+
+    if (!isSupabaseConfigured) {
+      setError(
+        'No Supabase project is connected yet, so this sale cannot be saved. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env, then try again.'
+      )
+      return
+    }
 
     const validLines = lines.filter((l) => l.description.trim() && l.amount.trim())
     if (validLines.length === 0) {

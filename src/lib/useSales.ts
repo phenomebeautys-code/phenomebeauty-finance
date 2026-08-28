@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import { supabase } from './supabase'
+import { supabase, isSupabaseConfigured } from './supabase'
 import { demoSales } from './demoData'
 import type { FinanceSaleWithLines } from './types'
-
-const isConnected = Boolean(
-  import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY
-)
 
 export function useSales() {
   const [sales, setSales] = useState<FinanceSaleWithLines[]>([])
@@ -17,7 +13,7 @@ export function useSales() {
     setLoading(true)
     setError(null)
 
-    if (!isConnected) {
+    if (!isSupabaseConfigured) {
       setSales(demoSales)
       setUsingDemoData(true)
       setLoading(false)

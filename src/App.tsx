@@ -4,7 +4,6 @@ import { useFinanceData } from './lib/useFinanceData';
 import { useSales } from './lib/useSales';
 import { useVehicleData } from './lib/useVehicleData';
 import type { User } from '@supabase/supabase-js';
-import type { FinanceSaleWithLines, FinanceVehicle, ReconciliationMatch, FinanceBankImport, YocoPayout, YocoSyncRun, FinancePocket, FinancePocketSnapshot, FinanceExpense, FinancePersonalAdvance, VehicleOdometerEntry, VehicleTrip, VehicleContribution, CallOutSummary } from './lib/types';
 import { Login } from './pages/Login';
 import { Overview } from './pages/Overview';
 import { NewSale } from './pages/NewSale';
@@ -16,6 +15,7 @@ import { ExpensesAndAdvances } from './pages/ExpensesAndAdvances';
 import { VehicleMobility } from './pages/VehicleMobility';
 import { OdometerCheckIn } from './pages/OdometerCheckIn';
 import { BottomNav } from './components/BottomNav';
+import type { Tab } from './components/BottomNav';
 import './App.css';
 
 type Page = 'overview' | 'new-sale' | 'sales-ledger' | 'reconciliation' | 'sync' | 'protected-cash' | 'expenses' | 'vehicle' | 'checkin';
@@ -41,81 +41,52 @@ function AuthenticatedApp({ user, onSignOut }: { user: User; onSignOut: () => vo
     setCurrentPage('vehicle');
   };
 
+  // Map financeData to what Overview expects
+  const overviewProps = {
+    sales: salesData.sales ?? [],
+    expectedCents: financeData.yocoPayments?.reduce((sum, p) => sum + (p.amount_cents ?? 0), 0) ?? 0,
+    expectedCount: financeData.yocoPayments?.length ?? 0,
+    reconciliationExceptions: financeData.reconciliationMatches ? 0 : financeData.yocoPayments?.length ?? 0,
+    syncStale: (financeData.syncRuns?.length ?? 0) === 0,
+    vehicle: vehicleData.vehicle ?? null,
+    vehicleReserveCents: 0,
+  };
+
   const renderPage = () => {
     switch (currentPage) {
       case 'overview':
-        return (
-          <Overview
-            sales={financeData.sales ?? []}
-            expectedCents={financeData.expectedCents ?? 0}
-            expectedCount={financeData.expectedCount ?? 0}
-            reconciliationExceptions={financeData.reconciliationExceptions ?? 0}
-            syncStale={financeData.syncStale ?? false}
-            vehicle={financeData.vehicle as FinanceVehicle ?? null}
-            vehicleReserveCents={financeData.vehicleReserveCents ?? 0}
-          />
-        );
+        return <Overview {...overviewProps} />;
       case 'new-sale':
         return <NewSale onSaved={handleNewSaleSaved} />;
       case 'sales-ledger':
         return <SalesLedgerPage sales={salesData.sales ?? []} />;
       case 'reconciliation':
-        return (
-          <Reconciliation
-            matches={financeData.reconciliationMatches ?? []}
-            bankImports={financeData.bankImports ?? []}
-            payouts={financeData.payouts ?? []}
-          />
-        );
+        return <Reconciliation matches={financeData.reconciliationMatches ?? []} bankImports={financeData.bankImports ?? []} payouts={financeData.yocoPayouts ?? []} />;
       case 'sync':
         return <SyncIntegrations syncRuns={financeData.syncRuns ?? []} />;
       case 'protected-cash':
-        return (
-          <ProtectedCash
-            pockets={financeData.pockets ?? []}
-            snapshots={financeData.snapshots ?? []}
-          />
-        );
+        return <ProtectedCash pockets={financeData.pockets ?? []} snapshots={financeData.pocketSnapshots ?? []} />;
       case 'expenses':
-        return (
-          <ExpensesAndAdvances
-            expenses={financeData.expenses ?? []}
-            advances={financeData.advances ?? []}
-          />
-        );
+        return <ExpensesAndAdvances expenses={financeData.expenses ?? []} advances={financeData.advances ?? []} />;
       case 'vehicle':
-        return (
-          <VehicleMobility
-            vehicle={vehicleData.vehicle as FinanceVehicle ?? null}
-            odometerEntries={vehicleData.odometerEntries ?? []}
-            trips={vehicleData.trips ?? []}
-            contributions={vehicleData.contributions ?? []}
-            callOutSummary={vehicleData.callOutSummary as CallOutSummary ?? { count: 0, totalFeesCents: 0 }}
-            onCheckIn={() => setCurrentPage('checkin')}
-          />
-        );
+        return <VehicleMobility vehicle={vehicleData.vehicle ?? null} odometerEntries={vehicleData.odometerEntries ?? []} trips={vehicleData.trips ?? []} contributions={vehicleData.contributions ?? []} callOutSummary={vehicleData.callOutSummary ?? { count: 0, totalFeesCents: 0 }} onCheckIn={() => setCurrentPage('checkin')} />;
       case 'checkin':
-        return (
-          <OdometerCheckIn
-            vehicle={vehicleData.vehicle as FinanceVehicle}
-            lastEntry={vehicleData.odometerEntries?.[0] as VehicleOdometerEntry}
-            onSaved={handleCheckInSaved}
-            onCancel={handleCheckInCancel}
-          />
-        );
+        return <OdometerCheckIn vehicle={vehicleData.vehicle} lastEntry={vehicleData.odometerEntries?.[0]} onSaved={handleCheckInSaved} onCancel={handleCheckInCancel} />;
       default:
-        return (
-          <Overview
-            sales={financeData.sales ?? []}
-            expectedCents={financeData.expectedCents ?? 0}
-            expectedCount={financeData.expectedCount ?? 0}
-            reconciliationExceptions={financeData.reconciliationExceptions ?? 0}
-            syncStale={financeData.syncStale ?? false}
-            vehicle={financeData.vehicle as FinanceVehicle ?? null}
-            vehicleReserveCents={financeData.vehicleReserveCents ?? 0}
-          />
-        );
+        return <Overview {...overviewProps} />;
     }
+  };
+
+  const tabMap: Record<Page, Tab> = {
+    'overview': 'overview',
+    'new-sale': 'new-sale',
+    'sales-ledger': 'sales',
+    'reconciliation': 'reconciliation',
+    'sync': 'sync',
+    'protected-cash': 'protected',
+    'expenses': 'expenses',
+    'vehicle': 'vehicle',
+    'checkin': 'checkin',
   };
 
   return (
@@ -130,7 +101,7 @@ function AuthenticatedApp({ user, onSignOut }: { user: User; onSignOut: () => vo
       <main className="app-main">
         {renderPage()}
       </main>
-      <BottomNav currentPage={currentPage} onPageChange={setCurrentPage} />
+      <BottomNav tab={tabMap[currentPage]} onChange={(t) => setCurrentPage(t as Page)} />
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useFinanceData } from './lib/useFinanceData';
 import { useSales } from './lib/useSales';
 import { useVehicleData } from './lib/useVehicleData';
 import type { User } from '@supabase/supabase-js';
+import type { FinanceSaleWithLines, FinanceVehicle, ReconciliationMatch, FinanceBankImport, YocoPayout, YocoSyncRun, FinancePocket, FinancePocketSnapshot, FinanceExpense, FinancePersonalAdvance, VehicleOdometerEntry, VehicleTrip, VehicleContribution, CallOutSummary } from './lib/types';
 import { Login } from './pages/Login';
 import { Overview } from './pages/Overview';
 import { NewSale } from './pages/NewSale';
@@ -27,13 +28,11 @@ function AuthenticatedApp({ user, onSignOut }: { user: User; onSignOut: () => vo
   const vehicleData = useVehicleData();
 
   const handleNewSaleSaved = () => {
-    // Refresh sales data after new sale
     salesData.refresh?.();
     setCurrentPage('overview');
   };
 
   const handleCheckInSaved = () => {
-    // Refresh vehicle data after check-in
     vehicleData.refresh?.();
     setCurrentPage('overview');
   };
@@ -45,37 +44,77 @@ function AuthenticatedApp({ user, onSignOut }: { user: User; onSignOut: () => vo
   const renderPage = () => {
     switch (currentPage) {
       case 'overview':
-        return <Overview {...financeData} />;
+        return (
+          <Overview
+            sales={financeData.sales ?? []}
+            expectedCents={financeData.expectedCents ?? 0}
+            expectedCount={financeData.expectedCount ?? 0}
+            reconciliationExceptions={financeData.reconciliationExceptions ?? 0}
+            syncStale={financeData.syncStale ?? false}
+            vehicle={financeData.vehicle as FinanceVehicle ?? null}
+            vehicleReserveCents={financeData.vehicleReserveCents ?? 0}
+          />
+        );
       case 'new-sale':
         return <NewSale onSaved={handleNewSaleSaved} />;
       case 'sales-ledger':
-        return <SalesLedgerPage sales={salesData.sales} />;
+        return <SalesLedgerPage sales={salesData.sales ?? []} />;
       case 'reconciliation':
-        return <Reconciliation matches={financeData.reconciliationMatches} bankImports={financeData.bankImports} payouts={financeData.payouts} />;
+        return (
+          <Reconciliation
+            matches={financeData.reconciliationMatches ?? []}
+            bankImports={financeData.bankImports ?? []}
+            payouts={financeData.payouts ?? []}
+          />
+        );
       case 'sync':
-        return <SyncIntegrations syncRuns={financeData.syncRuns} />;
+        return <SyncIntegrations syncRuns={financeData.syncRuns ?? []} />;
       case 'protected-cash':
-        return <ProtectedCash pockets={financeData.pockets} snapshots={financeData.snapshots} />;
+        return (
+          <ProtectedCash
+            pockets={financeData.pockets ?? []}
+            snapshots={financeData.snapshots ?? []}
+          />
+        );
       case 'expenses':
-        return <ExpensesAndAdvances expenses={financeData.expenses} advances={financeData.advances} />;
+        return (
+          <ExpensesAndAdvances
+            expenses={financeData.expenses ?? []}
+            advances={financeData.advances ?? []}
+          />
+        );
       case 'vehicle':
-        return <VehicleMobility 
-          vehicle={vehicleData.vehicle} 
-          odometerEntries={vehicleData.odometerEntries} 
-          trips={vehicleData.trips} 
-          contributions={vehicleData.contributions} 
-          callOutSummary={vehicleData.callOutSummary} 
-          onCheckIn={() => setCurrentPage('checkin')} 
-        />;
+        return (
+          <VehicleMobility
+            vehicle={vehicleData.vehicle as FinanceVehicle ?? null}
+            odometerEntries={vehicleData.odometerEntries ?? []}
+            trips={vehicleData.trips ?? []}
+            contributions={vehicleData.contributions ?? []}
+            callOutSummary={vehicleData.callOutSummary as CallOutSummary ?? { count: 0, totalFeesCents: 0 }}
+            onCheckIn={() => setCurrentPage('checkin')}
+          />
+        );
       case 'checkin':
-        return <OdometerCheckIn 
-          vehicle={vehicleData.vehicle!} 
-          lastEntry={vehicleData.odometerEntries[0]} 
-          onSaved={handleCheckInSaved} 
-          onCancel={handleCheckInCancel} 
-        />;
+        return (
+          <OdometerCheckIn
+            vehicle={vehicleData.vehicle as FinanceVehicle}
+            lastEntry={vehicleData.odometerEntries?.[0] as VehicleOdometerEntry}
+            onSaved={handleCheckInSaved}
+            onCancel={handleCheckInCancel}
+          />
+        );
       default:
-        return <Overview {...financeData} />;
+        return (
+          <Overview
+            sales={financeData.sales ?? []}
+            expectedCents={financeData.expectedCents ?? 0}
+            expectedCount={financeData.expectedCount ?? 0}
+            reconciliationExceptions={financeData.reconciliationExceptions ?? 0}
+            syncStale={financeData.syncStale ?? false}
+            vehicle={financeData.vehicle as FinanceVehicle ?? null}
+            vehicleReserveCents={financeData.vehicleReserveCents ?? 0}
+          />
+        );
     }
   };
 

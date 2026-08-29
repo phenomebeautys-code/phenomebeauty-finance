@@ -57,13 +57,11 @@ function AuthenticatedApp({ user, onSignOut }: { user: User; onSignOut: () => vo
 
 export function App() {
   const [authState, setAuthState] = useState<'loading' | 'authenticated' | 'unauthenticated'>('loading');
-  const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
     getSession().then((s) => {
       if (s) {
-        setSession(s);
         setUser(s.user);
         setAuthState('authenticated');
       } else {
@@ -73,11 +71,9 @@ export function App() {
 
     const { subscription } = subscribeToAuthChanges((_event, s) => {
       if (s) {
-        setSession(s);
         setUser(s.user);
         setAuthState('authenticated');
       } else {
-        setSession(null);
         setUser(null);
         setAuthState('unauthenticated');
       }

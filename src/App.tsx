@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { supabase } from './lib/supabase';
 import { getSession, subscribeToAuthChanges, signOut } from './lib/auth';
 import type { Session, User } from '@supabase/supabase-js';
 import { Login } from './pages/Login';
@@ -15,7 +14,7 @@ import { VehicleMobility } from './pages/VehicleMobility';
 import { OdometerCheckIn } from './pages/OdometerCheckIn';
 import './App.css';
 
-function AuthenticatedApp({ user, session, onSignOut }: { user: User; session: Session; onSignOut: () => void }) {
+function AuthenticatedApp({ user, onSignOut }: { user: User; onSignOut: () => void }) {
   return (
     <BrowserRouter>
       <div className="app-container">
@@ -62,7 +61,6 @@ export function App() {
   const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
-    // Check initial session
     getSession().then((s) => {
       if (s) {
         setSession(s);
@@ -73,8 +71,7 @@ export function App() {
       }
     });
 
-    // Subscribe to auth changes
-    const { subscription } = subscribeToAuthChanges((event, s) => {
+    const { subscription } = subscribeToAuthChanges((_event, s) => {
       if (s) {
         setSession(s);
         setUser(s.user);
@@ -118,5 +115,5 @@ export function App() {
     return <Login onLoginSuccess={handleLoginSuccess} />;
   }
 
-  return <AuthenticatedApp user={user!} session={session!} onSignOut={handleSignOut} />;
+  return <AuthenticatedApp user={user!} onSignOut={handleSignOut} />;
 }

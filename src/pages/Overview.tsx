@@ -1,3 +1,4 @@
+// src/pages/Overview.tsx
 import { useMemo } from 'react'
 import type { FinanceSaleWithLines, LineType, FinanceVehicle } from '../lib/types'
 import { LINE_TYPE_LABELS } from '../lib/types'
@@ -8,6 +9,7 @@ import { CashPositionCard } from '../components/CashPositionCard'
 import { SectionCard, SourceBadge, FigureRow, NotConnectedNote } from '../components/SectionCard'
 import { AttentionPanel, type AttentionItem } from '../components/AttentionPanel'
 import { weeksRemaining, requiredWeeklyContribution } from '../lib/vehicleCalc'
+import { useFinanceData } from '../lib/useFinanceData'
 
 function todayLabel(): string {
   return new Date().toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -34,6 +36,17 @@ export function Overview({
   vehicle: FinanceVehicle | null
   vehicleReserveCents: number
 }) {
+  const { latestCashSnapshot, expectedYocoPayoutCents } = useFinanceData()
+
+  const fnbCents = latestCashSnapshot?.fnb_operating_balance_cents ?? 0
+  const yocoSavingsCents = latestCashSnapshot?.yoco_savings_balance_cents ?? 0
+  const expectedPayoutCents = latestCashSnapshot?.expected_yoco_payout_cents ?? expectedYocoPayoutCents
+
+  // Protected reserves from settings (R2,500 floor + R400 fuel buffer)
+  const protectedCents = 250000 + 40000
+
+  const safeToUseCents = fnbCents + expectedPayoutCents - protectedCents
+
   const now = new Date()
   const thisMonthKey = `${now.getFullYear()}-${now.getMonth()}`
 
@@ -111,7 +124,15 @@ export function Overview({
       </header>
 
       {/* 9.3 — primary financial status */}
-      <CashPositionCard expectedCents={expectedCents} expectedCount={expectedCount} />
+      <CashPositionCard
+        expectedCents={expectedCents}
+        expectedCount={expectedCount}
+        fnbCents={fnbCents}
+        yocoSavingsCents={yocoSavingsCents}
+        expectedPayoutCents={expectedPayoutCents}
+        protectedCents={protectedCents}
+        safeToUseCents={safeToUseCents}
+      />
 
       <div
         style={{
@@ -124,16 +145,22 @@ export function Overview({
         <SectionCard
           eyebrow="Weekly cash control"
           title="Sunday → Sunday"
-          status={<SourceBadge state="not_connected" />}
+          status={<SourceBadge state={fnbCents > 0 ? 'live' : 'not_connected'} />}
         >
-          <FigureRow label="FNB balance" value="—" muted />
-          <FigureRow label="Expected Yoco payout" value="—" muted />
+          <FigureRow label="FNB balance" value={fnbCents > 0 ? formatRands(fnbCents) : '—'} />
+          <FigureRow label="Expected Yoco payout" value={expectedPayoutCents > 0 ? formatRands(expectedPayoutCents) : '—'} />
           <FigureRow label="Fuel buffer" value="R 400" muted />
           <FigureRow label="Operating floor" value="R 2,500" muted />
-          <FigureRow label="Safe vehicle contribution" value="—" muted emphasis />
-          <NotConnectedNote>
-            Connect FNB and Yoco to calculate this week's safe vehicle contribution automatically.
-          </NotConnectedNote>
+          <FigureRow
+            label="Safe vehicle contribution"
+            value={safeToUseCents > 0 ? formatRands(safeToUseCents) : '—'}
+            emphasis
+          />
+          {fnbCents === 0 && (
+            <NotConnectedNote>
+              Record your FNB and Yoco balances under Cash Control to calculate this week's safe vehicle contribution automatically.
+            </NotConnectedNote>
+          )}
         </SectionCard>
 
         {/* 9.5 — vehicle settlement */}
@@ -217,11 +244,13 @@ export function Overview({
         }}
       >
         {/* 9.8 — reserves */}
-        <SectionCard eyebrow="Reserves" status={<SourceBadge state="not_connected" />}>
+        <SectionCard eyebrow="Reserves" status={<SourceBadge state={fnbCents > 0 ? 'live' : 'not_connected'} />}>
           <FigureRow label="Fuel buffer" value="R 400 target" muted />
           <FigureRow label="Operating floor" value="R 2,500 target" muted />
-          <FigureRow label="Vehicle settlement" value="—" muted />
-          <NotConnectedNote>Reserve balances need FNB and Yoco Savings connected.</NotConnectedNote>
+          <FigureRow label="Vehicle settlement" value={vehicleReserveCents > 0 ? formatRands(vehicleReserveCents) : '—'} muted />
+          {fnbCents === 0 && (
+            <NotConnectedNote>Reserve balances need FNB and Yoco Savings connected.</NotConnectedNote>
+          )}
         </SectionCard>
 
         {/* 9.9 — owner allocation preview */}

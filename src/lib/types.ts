@@ -277,3 +277,13 @@ export const TRIP_CATEGORY_LABELS: Record<TripCategory, string> = {
   other: 'Other approved business',
 }
 
+export type FinanceCashSnapshot = {
+  id: string
+  snapshot_at: string
+  fnb_operating_balance_cents: number
+  yoco_savings_balance_cents: number
+  expected_yoco_payout_cents: number
+  notes: string | null
+  captured_by: string | null
+  created_at: string
+}

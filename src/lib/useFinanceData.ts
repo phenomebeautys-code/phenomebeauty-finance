@@ -1,3 +1,4 @@
+// src/lib/useFinanceData.ts
 import { useCallback, useEffect, useState } from 'react'
 import { supabase, isSupabaseConfigured } from './supabase'
 import type {
@@ -10,6 +11,7 @@ import type {
   FinancePersonalAdvance,
   FinancePocket,
   FinancePocketSnapshot,
+  FinanceCashSnapshot,
 } from './types'
 
 export interface FinanceOverviewData {
@@ -22,6 +24,9 @@ export interface FinanceOverviewData {
   advances: FinancePersonalAdvance[]
   pockets: FinancePocket[]
   pocketSnapshots: FinancePocketSnapshot[]
+  cashSnapshots: FinanceCashSnapshot[]
+  latestCashSnapshot: FinanceCashSnapshot | null
+  expectedYocoPayoutCents: number
 }
 
 const EMPTY: FinanceOverviewData = {
@@ -34,13 +39,11 @@ const EMPTY: FinanceOverviewData = {
   advances: [],
   pockets: [],
   pocketSnapshots: [],
+  cashSnapshots: [],
+  latestCashSnapshot: null,
+  expectedYocoPayoutCents: 0,
 }
 
-/**
- * Reads the finance-wide tables beyond finance_sales: Yoco payments/payouts,
- * sync run history, reconciliation matches, FNB imports, expenses, advances,
- * and savings pockets. Read-only — Finance never writes to source systems.
- */
 export function useFinanceData() {
   const [data, setData] = useState<FinanceOverviewData>(EMPTY)
   const [loading, setLoading] = useState(true)
@@ -66,6 +69,8 @@ export function useFinanceData() {
       advances,
       pockets,
       pocketSnapshots,
+      cashSnapshots,
+      unpaidPayouts,
     ] = await Promise.all([
       supabase.from('yoco_payments').select('*').order('yoco_created_at', { ascending: false }).limit(200),
       supabase.from('yoco_payouts').select('*').order('payout_date', { ascending: false }).limit(100),
@@ -76,6 +81,11 @@ export function useFinanceData() {
       supabase.from('finance_personal_advances').select('*').order('advance_date', { ascending: false }).limit(200),
       supabase.from('finance_pockets').select('*'),
       supabase.from('finance_pocket_snapshots').select('*').order('snapshot_at', { ascending: false }).limit(50),
+      supabase.from('finance_cash_snapshots').select('*').order('snapshot_at', { ascending: false }).limit(50),
+      supabase
+        .from('yoco_payouts')
+        .select('net_amount_cents')
+        .neq('status', 'paid'),
     ])
 
     const firstError = [
@@ -88,11 +98,17 @@ export function useFinanceData() {
       advances,
       pockets,
       pocketSnapshots,
+      cashSnapshots,
+      unpaidPayouts,
     ].find((r) => r.error)?.error
 
     if (firstError) {
       setError(firstError.message)
     }
+
+    const snapshots = (cashSnapshots.data as FinanceCashSnapshot[]) ?? []
+    const latest = snapshots[0] || null
+    const expected = (unpaidPayouts.data || []).reduce((sum, p) => sum + (p.net_amount_cents || 0), 0)
 
     setData({
       yocoPayments: (yocoPayments.data as YocoPayment[]) ?? [],
@@ -104,6 +120,9 @@ export function useFinanceData() {
       advances: (advances.data as FinancePersonalAdvance[]) ?? [],
       pockets: (pockets.data as FinancePocket[]) ?? [],
       pocketSnapshots: (pocketSnapshots.data as FinancePocketSnapshot[]) ?? [],
+      cashSnapshots: snapshots,
+      latestCashSnapshot: latest,
+      expectedYocoPayoutCents: expected,
     })
     setLoading(false)
   }, [])

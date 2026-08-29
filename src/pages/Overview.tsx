@@ -16,7 +16,19 @@ function monthLabel(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' })
 }
 
-export function Overview({ sales }: { sales: FinanceSaleWithLines[] }) {
+export function Overview({
+  sales,
+  expectedCents,
+  expectedCount,
+  reconciliationExceptions,
+  syncStale,
+}: {
+  sales: FinanceSaleWithLines[]
+  expectedCents: number
+  expectedCount: number
+  reconciliationExceptions: number
+  syncStale: boolean
+}) {
   const now = new Date()
   const thisMonthKey = `${now.getFullYear()}-${now.getMonth()}`
 
@@ -58,14 +70,27 @@ export function Overview({ sales }: { sales: FinanceSaleWithLines[] }) {
 
   const awaitingReview = sales.filter((s) => s.reconciliation_status === 'awaiting_review')
 
-  const attentionItems: AttentionItem[] = awaitingReview
-    .slice(0, 5)
-    .map((s) => ({
+  const attentionItems: AttentionItem[] = [
+    ...awaitingReview.slice(0, 5).map((s) => ({
       id: s.id,
       label: `${s.customer_reference ?? 'Unnamed sale'} · ${formatRands(
         s.gross_amount_cents
       )} not yet matched to a Yoco payment or booking`,
-    }))
+    })),
+    ...(reconciliationExceptions > 0
+      ? [
+          {
+            id: 'reconciliation-exceptions',
+            label: `${reconciliationExceptions} reconciliation ${
+              reconciliationExceptions === 1 ? 'match needs' : 'matches need'
+            } review`,
+          },
+        ]
+      : []),
+    ...(syncStale
+      ? [{ id: 'sync-stale', label: 'Yoco sync has not completed successfully recently' }]
+      : []),
+  ]
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -81,7 +106,7 @@ export function Overview({ sales }: { sales: FinanceSaleWithLines[] }) {
       </header>
 
       {/* 9.3 — primary financial status */}
-      <CashPositionCard />
+      <CashPositionCard expectedCents={expectedCents} expectedCount={expectedCount} />
 
       <div
         style={{

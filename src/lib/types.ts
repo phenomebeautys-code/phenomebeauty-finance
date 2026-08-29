@@ -77,3 +77,139 @@ export const SOURCE_LABELS: Record<SaleSource, string> = {
   yoco_unmatched: 'Yoco unmatched',
   fnb_unmatched: 'FNB unmatched',
 }
+
+// --- Yoco ---
+
+export type YocoPaymentStatus = string
+
+export interface YocoPayment {
+  id: string
+  yoco_payment_id: string
+  payment_reference: string | null
+  status: YocoPaymentStatus
+  currency: string
+  gross_amount_cents: number
+  fee_amount_cents: number | null
+  net_amount_cents: number | null
+  checkout_id: string | null
+  yoco_created_at: string | null
+  yoco_updated_at: string | null
+}
+
+export interface YocoPayout {
+  id: string
+  yoco_payout_id: string
+  status: string
+  gross_amount_cents: number | null
+  fee_amount_cents: number | null
+  net_amount_cents: number
+  payout_date: string | null
+  expected_bank_date: string | null
+}
+
+export type SyncScope = 'payments' | 'refunds' | 'payouts' | 'webhooks' | 'full'
+export type SyncStatus = 'running' | 'completed' | 'completed_with_errors' | 'failed'
+
+export interface YocoSyncRun {
+  id: string
+  sync_scope: SyncScope
+  sync_mode: string
+  status: SyncStatus
+  started_at: string
+  completed_at: string | null
+  records_read: number
+  records_inserted: number
+  records_updated: number
+  records_failed: number
+  error_summary: string | null
+}
+
+// --- Reconciliation ---
+
+export type MatchType =
+  | 'source_to_yoco_payment'
+  | 'yoco_payout_to_bank_transaction'
+  | 'sale_to_bank_transaction'
+  | 'manual'
+export type MatchStatus = 'suggested' | 'confirmed' | 'rejected' | 'broken'
+
+export interface ReconciliationMatch {
+  id: string
+  match_type: MatchType
+  status: MatchStatus
+  confidence_score: number | null
+  matched_amount_cents: number | null
+  matched_at: string | null
+  created_at: string
+  notes: string | null
+}
+
+// --- Bank ---
+
+export interface FinanceBankImport {
+  id: string
+  bank_name: string
+  source_filename: string
+  statement_start_date: string | null
+  statement_end_date: string | null
+  opening_balance_cents: number | null
+  closing_balance_cents: number | null
+  parse_status: 'pending' | 'parsed' | 'needs_review' | 'failed'
+  imported_at: string
+}
+
+export interface FinanceBankTransaction {
+  id: string
+  transaction_date: string
+  description: string
+  signed_amount_cents: number
+  running_balance_cents: number | null
+  direction: 'credit' | 'debit'
+  category: string | null
+  business_status: 'business' | 'personal_advance' | 'mixed' | 'transfer' | 'excluded' | 'unreviewed'
+  review_status: 'awaiting_review' | 'reviewed' | 'matched' | 'excluded'
+}
+
+// --- Expenses & advances ---
+
+export interface FinanceExpense {
+  id: string
+  expense_date: string
+  description: string
+  category: string
+  paid_from: 'fnb' | 'yoco_savings' | 'cash' | 'personal' | 'other'
+  gross_amount_cents: number
+  business_use_percent: number
+  business_amount_cents: number
+  approval_status: 'awaiting_review' | 'approved' | 'rejected'
+  receipt_url: string | null
+}
+
+export interface FinancePersonalAdvance {
+  id: string
+  advance_date: string
+  person_name: 'Shu-meez' | 'Arshad'
+  amount_cents: number
+  paid_from: 'fnb' | 'yoco_savings' | 'cash' | 'other'
+  status: 'outstanding' | 'settled' | 'carried_forward' | 'written_off'
+  settled_at: string | null
+}
+
+// --- Protected cash / pockets ---
+
+export interface FinancePocket {
+  id: string
+  name: string
+  purpose: string
+  is_active: boolean
+  target_amount_cents: number | null
+}
+
+export interface FinancePocketSnapshot {
+  id: string
+  snapshot_at: string
+  total_savings_cents: number
+  savings_rate_percent: number | null
+  notes: string | null
+}
+

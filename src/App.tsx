@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { getSession, subscribeToAuthChanges, signOut } from './lib/auth';
-import type { Session, User } from '@supabase/supabase-js';
+import { useFinanceData } from './lib/useFinanceData';
+import { useSales } from './lib/useSales';
+import { useVehicleData } from './lib/useVehicleData';
+import type { User } from '@supabase/supabase-js';
 import { Login } from './pages/Login';
 import { Overview } from './pages/Overview';
 import { NewSale } from './pages/NewSale';
@@ -12,46 +14,85 @@ import { ProtectedCash } from './pages/ProtectedCash';
 import { ExpensesAndAdvances } from './pages/ExpensesAndAdvances';
 import { VehicleMobility } from './pages/VehicleMobility';
 import { OdometerCheckIn } from './pages/OdometerCheckIn';
+import { BottomNav } from './components/BottomNav';
 import './App.css';
 
+type Page = 'overview' | 'new-sale' | 'sales-ledger' | 'reconciliation' | 'sync' | 'protected-cash' | 'expenses' | 'vehicle' | 'checkin';
+
 function AuthenticatedApp({ user, onSignOut }: { user: User; onSignOut: () => void }) {
+  const [currentPage, setCurrentPage] = useState<Page>('overview');
+  
+  const financeData = useFinanceData();
+  const salesData = useSales();
+  const vehicleData = useVehicleData();
+
+  const handleNewSaleSaved = () => {
+    // Refresh sales data after new sale
+    salesData.refresh?.();
+    setCurrentPage('overview');
+  };
+
+  const handleCheckInSaved = () => {
+    // Refresh vehicle data after check-in
+    vehicleData.refresh?.();
+    setCurrentPage('overview');
+  };
+
+  const handleCheckInCancel = () => {
+    setCurrentPage('vehicle');
+  };
+
+  const renderPage = () => {
+    switch (currentPage) {
+      case 'overview':
+        return <Overview {...financeData} />;
+      case 'new-sale':
+        return <NewSale onSaved={handleNewSaleSaved} />;
+      case 'sales-ledger':
+        return <SalesLedgerPage sales={salesData.sales} />;
+      case 'reconciliation':
+        return <Reconciliation matches={financeData.reconciliationMatches} bankImports={financeData.bankImports} payouts={financeData.payouts} />;
+      case 'sync':
+        return <SyncIntegrations syncRuns={financeData.syncRuns} />;
+      case 'protected-cash':
+        return <ProtectedCash pockets={financeData.pockets} snapshots={financeData.snapshots} />;
+      case 'expenses':
+        return <ExpensesAndAdvances expenses={financeData.expenses} advances={financeData.advances} />;
+      case 'vehicle':
+        return <VehicleMobility 
+          vehicle={vehicleData.vehicle} 
+          odometerEntries={vehicleData.odometerEntries} 
+          trips={vehicleData.trips} 
+          contributions={vehicleData.contributions} 
+          callOutSummary={vehicleData.callOutSummary} 
+          onCheckIn={() => setCurrentPage('checkin')} 
+        />;
+      case 'checkin':
+        return <OdometerCheckIn 
+          vehicle={vehicleData.vehicle!} 
+          lastEntry={vehicleData.odometerEntries[0]} 
+          onSaved={handleCheckInSaved} 
+          onCancel={handleCheckInCancel} 
+        />;
+      default:
+        return <Overview {...financeData} />;
+    }
+  };
+
   return (
-    <BrowserRouter>
-      <div className="app-container">
-        <header className="app-header">
-          <h1>Phenome Beauty Finance</h1>
-          <div className="user-info">
-            <span>{user.email}</span>
-            <button onClick={onSignOut} className="sign-out-btn">Sign out</button>
-          </div>
-        </header>
-        <nav className="app-nav">
-          <a href="/">Overview</a>
-          <a href="/new-sale">New Sale</a>
-          <a href="/sales-ledger">Sales Ledger</a>
-          <a href="/reconciliation">Reconciliation</a>
-          <a href="/vehicle">Vehicle</a>
-          <a href="/checkin">Check-in</a>
-          <a href="/expenses">Expenses</a>
-          <a href="/protected-cash">Protected Cash</a>
-          <a href="/sync">Sync</a>
-        </nav>
-        <main className="app-main">
-          <Routes>
-            <Route path="/" element={<Overview />} />
-            <Route path="/new-sale" element={<NewSale />} />
-            <Route path="/sales-ledger" element={<SalesLedgerPage />} />
-            <Route path="/reconciliation" element={<Reconciliation />} />
-            <Route path="/sync" element={<SyncIntegrations />} />
-            <Route path="/protected-cash" element={<ProtectedCash />} />
-            <Route path="/expenses" element={<ExpensesAndAdvances />} />
-            <Route path="/vehicle" element={<VehicleMobility />} />
-            <Route path="/checkin" element={<OdometerCheckIn />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </main>
-      </div>
-    </BrowserRouter>
+    <div className="app-container">
+      <header className="app-header">
+        <h1>Phenome Beauty Finance</h1>
+        <div className="user-info">
+          <span>{user.email}</span>
+          <button onClick={onSignOut} className="sign-out-btn">Sign out</button>
+        </div>
+      </header>
+      <main className="app-main">
+        {renderPage()}
+      </main>
+      <BottomNav currentPage={currentPage} onPageChange={setCurrentPage} />
+    </div>
   );
 }
 

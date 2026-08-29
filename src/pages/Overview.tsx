@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import type { FinanceSaleWithLines, LineType } from '../lib/types'
+import type { FinanceSaleWithLines, LineType, FinanceVehicle } from '../lib/types'
 import { LINE_TYPE_LABELS } from '../lib/types'
 import { formatRands } from '../lib/money'
 import { SplitBar } from '../components/SplitBar'
@@ -7,6 +7,7 @@ import { StatusPill } from '../components/StatusPill'
 import { CashPositionCard } from '../components/CashPositionCard'
 import { SectionCard, SourceBadge, FigureRow, NotConnectedNote } from '../components/SectionCard'
 import { AttentionPanel, type AttentionItem } from '../components/AttentionPanel'
+import { weeksRemaining, requiredWeeklyContribution } from '../lib/vehicleCalc'
 
 function todayLabel(): string {
   return new Date().toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -22,12 +23,16 @@ export function Overview({
   expectedCount,
   reconciliationExceptions,
   syncStale,
+  vehicle,
+  vehicleReserveCents,
 }: {
   sales: FinanceSaleWithLines[]
   expectedCents: number
   expectedCount: number
   reconciliationExceptions: number
   syncStale: boolean
+  vehicle: FinanceVehicle | null
+  vehicleReserveCents: number
 }) {
   const now = new Date()
   const thisMonthKey = `${now.getFullYear()}-${now.getMonth()}`
@@ -132,20 +137,54 @@ export function Overview({
         </SectionCard>
 
         {/* 9.5 — vehicle settlement */}
-        <SectionCard
-          eyebrow="Vehicle settlement"
-          title="Not yet configured"
-          status={<SourceBadge state="not_connected" />}
-        >
-          <FigureRow label="Remaining balance" value="—" muted />
-          <FigureRow label="Target date" value="—" muted />
-          <FigureRow label="Required this week" value="—" muted />
-          <FigureRow label="Gap" value="—" muted />
-          <NotConnectedNote>
-            Set the settlement balance and target date under Vehicle &amp; Mobility to see the
-            dynamic weekly target here.
-          </NotConnectedNote>
-        </SectionCard>
+        {vehicle ? (
+          <SectionCard eyebrow="Vehicle settlement" title={vehicle.name} status={<SourceBadge state="live" />}>
+            <FigureRow
+              label="Remaining balance"
+              value={vehicle.remaining_finance_cents != null ? formatRands(vehicle.remaining_finance_cents) : '—'}
+            />
+            <FigureRow label="Target date" value={vehicle.settlement_deadline ?? '—'} />
+            <FigureRow
+              label="Required this week"
+              value={
+                (() => {
+                  const req = requiredWeeklyContribution(vehicle)
+                  return req != null ? formatRands(req) : '—'
+                })()
+              }
+            />
+            <FigureRow
+              label="Gap"
+              value={
+                vehicle.remaining_finance_cents != null
+                  ? formatRands(Math.max(vehicle.remaining_finance_cents - vehicleReserveCents, 0))
+                  : '—'
+              }
+              emphasis
+            />
+            <NotConnectedNote>
+              {(() => {
+                const weeks = weeksRemaining(vehicle.settlement_deadline)
+                return weeks != null ? `${weeks.toFixed(1)} weeks remaining. See Vehicle & Mobility for the full tracker.` : 'See Vehicle & Mobility for the full tracker.'
+              })()}
+            </NotConnectedNote>
+          </SectionCard>
+        ) : (
+          <SectionCard
+            eyebrow="Vehicle settlement"
+            title="Not yet configured"
+            status={<SourceBadge state="not_connected" />}
+          >
+            <FigureRow label="Remaining balance" value="—" muted />
+            <FigureRow label="Target date" value="—" muted />
+            <FigureRow label="Required this week" value="—" muted />
+            <FigureRow label="Gap" value="—" muted />
+            <NotConnectedNote>
+              Set the settlement balance and target date under Vehicle &amp; Mobility to see the
+              dynamic weekly target here.
+            </NotConnectedNote>
+          </SectionCard>
+        )}
       </div>
 
       {/* 9.7 — revenue snapshot (live, computed from finance_sales) */}

@@ -3,6 +3,7 @@ import { LedgerIcon, PlusCircleIcon, ListIcon } from './icons'
 
 export type Tab =
   | 'dashboard'
+  | 'vehicle'
   | 'reconciliation'
   | 'protected-cash'
   | 'expenses'
@@ -70,6 +71,17 @@ export function BottomNav({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => v
         <button
           type="button"
           className="bottom-nav-item"
+          data-active={tab === 'vehicle'}
+          onClick={() => onChange('vehicle')}
+        >
+          <span className="bottom-nav-icon">
+            <CarIcon active={tab === 'vehicle'} />
+          </span>
+          Vehicle
+        </button>
+        <button
+          type="button"
+          className="bottom-nav-item"
           data-active={tab === 'new-sale'}
           onClick={() => onChange('new-sale')}
         >
@@ -101,6 +113,24 @@ function DotsIcon({ active }: { active?: boolean }) {
       <circle cx="6" cy="12" r="1.6" fill={fill} />
       <circle cx="12" cy="12" r="1.6" fill={fill} />
       <circle cx="18" cy="12" r="1.6" fill={fill} />
+    </svg>
+  )
+}
+
+function CarIcon({ active }: { active?: boolean }) {
+  const stroke = active ? 'var(--rose)' : 'currentColor'
+  return (
+    <svg width="21" height="21" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M4 15.5V12l1.6-4.2A2 2 0 0 1 7.5 6.5h9a2 2 0 0 1 1.9 1.3L20 12v3.5"
+        stroke={stroke}
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <rect x="3" y="12" width="18" height="5" rx="1.4" stroke={stroke} strokeWidth="1.6" />
+      <circle cx="7.5" cy="17.5" r="1.4" stroke={stroke} strokeWidth="1.6" />
+      <circle cx="16.5" cy="17.5" r="1.4" stroke={stroke} strokeWidth="1.6" />
     </svg>
   )
 }

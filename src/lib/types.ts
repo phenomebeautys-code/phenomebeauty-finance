@@ -213,3 +213,67 @@ export interface FinancePocketSnapshot {
   notes: string | null
 }
 
+// --- Vehicle & Mobility ---
+
+export type VehiclePhase = 'settlement' | 'settled'
+
+export interface PostSettlementAllocation {
+  label: string
+  mode?: 'first_funded'
+  percent?: number
+}
+
+export interface FinanceVehicle {
+  id: string
+  name: string
+  phase: VehiclePhase
+  remaining_finance_cents: number | null
+  settlement_deadline: string | null
+  fuel_buffer_cents: number
+  fuel_price_cents_per_litre: number | null
+  consumption_l_per_100km: number | null
+  post_settlement_allocations: Record<string, PostSettlementAllocation>
+  is_active: boolean
+}
+
+export interface VehicleOdometerEntry {
+  id: string
+  vehicle_id: string
+  week_start: string
+  week_end: string
+  opening_odometer_km: number
+  closing_odometer_km: number
+  fuel_spent_cents: number
+  notes: string | null
+  submitted_at: string
+}
+
+export type TripCategory = 'stock_collection' | 'supplier_trip' | 'delivery' | 'vehicle_service' | 'other'
+
+export interface VehicleTrip {
+  id: string
+  vehicle_id: string
+  odometer_entry_id: string | null
+  trip_date: string
+  category: TripCategory
+  distance_km: number
+  notes: string | null
+  approved: boolean
+}
+
+export interface VehicleContribution {
+  id: string
+  vehicle_id: string
+  week_start: string
+  amount_cents: number
+  notes: string | null
+}
+
+export const TRIP_CATEGORY_LABELS: Record<TripCategory, string> = {
+  stock_collection: 'Stock collection',
+  supplier_trip: 'Supplier trip',
+  delivery: 'Delivery',
+  vehicle_service: 'Vehicle service',
+  other: 'Other approved business',
+}
+

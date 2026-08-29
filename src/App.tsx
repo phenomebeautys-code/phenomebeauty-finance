@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import './App.css'
 import { useSales } from './lib/useSales'
 import { useFinanceData } from './lib/useFinanceData'
+import { useVehicleData } from './lib/useVehicleData'
 import { Overview } from './pages/Overview'
 import { NewSale } from './pages/NewSale'
 import { SalesLedgerPage } from './pages/SalesLedgerPage'
@@ -9,10 +10,13 @@ import { Reconciliation } from './pages/Reconciliation'
 import { SyncIntegrations } from './pages/SyncIntegrations'
 import { ProtectedCash } from './pages/ProtectedCash'
 import { ExpensesAndAdvances } from './pages/ExpensesAndAdvances'
+import { VehicleMobility } from './pages/VehicleMobility'
+import { OdometerCheckIn } from './pages/OdometerCheckIn'
 import { BottomNav, type Tab } from './components/BottomNav'
 
 const TAB_LABELS: Record<Tab, string> = {
   dashboard: 'Overview',
+  vehicle: 'Vehicle & Mobility',
   reconciliation: 'Reconciliation',
   'protected-cash': 'Protected Cash',
   expenses: 'Expenses & Advances',
@@ -23,8 +27,10 @@ const TAB_LABELS: Record<Tab, string> = {
 
 function App() {
   const [tab, setTab] = useState<Tab>('dashboard')
+  const [checkingIn, setCheckingIn] = useState(false)
   const { sales, loading, usingDemoData, refresh } = useSales()
   const finance = useFinanceData()
+  const vehicleData = useVehicleData()
 
   const expected = useMemo(() => {
     const unpaid = finance.yocoPayouts.filter((p) => p.status !== 'paid')
@@ -45,7 +51,12 @@ function App() {
     return last.status === 'failed' || last.status === 'completed_with_errors'
   }, [finance.syncRuns])
 
-  const isLoading = loading || finance.loading
+  const vehicleReserveCents = useMemo(
+    () => vehicleData.contributions.reduce((sum, c) => sum + c.amount_cents, 0),
+    [vehicleData.contributions]
+  )
+
+  const isLoading = loading || finance.loading || vehicleData.loading
 
   return (
     <>
@@ -86,6 +97,8 @@ function App() {
                 expectedCount={expected.count}
                 reconciliationExceptions={reconciliationExceptions}
                 syncStale={syncStale}
+                vehicle={vehicleData.vehicle}
+                vehicleReserveCents={vehicleReserveCents}
               />
             )}
             {tab === 'new-sale' && <NewSale onSaved={refresh} />}
@@ -104,13 +117,34 @@ function App() {
               <ExpensesAndAdvances expenses={finance.expenses} advances={finance.advances} />
             )}
             {tab === 'sync' && <SyncIntegrations syncRuns={finance.syncRuns} />}
+            {tab === 'vehicle' &&
+              (checkingIn && vehicleData.vehicle ? (
+                <OdometerCheckIn
+                  vehicle={vehicleData.vehicle}
+                  lastEntry={vehicleData.odometerEntries[0]}
+                  onSaved={() => {
+                    setCheckingIn(false)
+                    vehicleData.refresh()
+                  }}
+                  onCancel={() => setCheckingIn(false)}
+                />
+              ) : (
+                <VehicleMobility
+                  vehicle={vehicleData.vehicle}
+                  odometerEntries={vehicleData.odometerEntries}
+                  trips={vehicleData.trips}
+                  contributions={vehicleData.contributions}
+                  callOutSummary={vehicleData.callOutSummary}
+                  onCheckIn={() => setCheckingIn(true)}
+                />
+              ))}
           </>
         )}
       </main>
 
       <footer className="shell-footer">
-        <span>Revenue, Yoco payments/payouts, and reconciliation matches are live.</span>
-        <span>FNB, Yoco Savings, vehicle, expenses and advances are wired up but awaiting data.</span>
+        <span>Revenue, Yoco payments/payouts, reconciliation matches, and vehicle settlement are live.</span>
+        <span>FNB, Yoco Savings, expenses and advances are wired up but awaiting data.</span>
       </footer>
 
       <BottomNav tab={tab} onChange={setTab} />

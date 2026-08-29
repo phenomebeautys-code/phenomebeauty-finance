@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import './App.css'
 import { useSales } from './lib/useSales'
-import { Dashboard } from './pages/Dashboard'
+import { Overview } from './pages/Overview'
 import { NewSale } from './pages/NewSale'
 import { SalesLedgerPage } from './pages/SalesLedgerPage'
 import { BottomNav } from './components/BottomNav'
@@ -19,17 +19,17 @@ function App() {
           <h1 className="shell-title">
             Phenome<span>Beauty</span> Finance
           </h1>
-          <p className="shell-subtitle">Service revenue and product revenue, from the same till.</p>
+          <p className="shell-subtitle">What can the business safely afford to do right now.</p>
         </div>
         <nav className="shell-tabs">
           <button className="shell-tab" data-active={tab === 'dashboard'} onClick={() => setTab('dashboard')}>
-            Dashboard
+            Overview
           </button>
           <button className="shell-tab" data-active={tab === 'new-sale'} onClick={() => setTab('new-sale')}>
             Record a sale
           </button>
           <button className="shell-tab" data-active={tab === 'ledger'} onClick={() => setTab('ledger')}>
-            All sales
+            Transactions
           </button>
         </nav>
       </header>
@@ -45,7 +45,7 @@ function App() {
           <p style={{ color: 'var(--ink-soft)' }}>Loading…</p>
         ) : (
           <>
-            {tab === 'dashboard' && <Dashboard sales={sales} />}
+            {tab === 'dashboard' && <Overview sales={sales} />}
             {tab === 'new-sale' && <NewSale onSaved={refresh} />}
             {tab === 'ledger' && <SalesLedgerPage sales={sales} />}
           </>

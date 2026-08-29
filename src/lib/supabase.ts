@@ -1,20 +1,6 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@supabase/supabase-js';
 
-const url = import.meta.env.VITE_SUPABASE_URL
-const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://papdxjcfimeyjgzmatpl.supabase.co';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhcGR4amNmaW1leWpnem1hdHBsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMDk4NjcsImV4cCI6MjA5MjY4NTg2N30.mn_JsORuYUBtHTqIF2RjY8YUJzY9zJQV0uGFXBvrJRc';
 
-export const isSupabaseConfigured = Boolean(url && anonKey)
-
-if (!isSupabaseConfigured) {
-  console.warn(
-    'Supabase environment variables are missing. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to a .env file before connecting to real data. Showing sample data until then.'
-  )
-}
-
-// createClient throws immediately if the URL is missing or malformed, so a
-// placeholder URL is used until real credentials are set. useSales checks
-// isSupabaseConfigured before ever reading from this client.
-export const supabase = createClient(
-  isSupabaseConfigured ? url : 'https://placeholder.supabase.co',
-  isSupabaseConfigured ? anonKey : 'placeholder-anon-key'
-)
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);

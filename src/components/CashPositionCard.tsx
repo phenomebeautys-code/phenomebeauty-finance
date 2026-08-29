@@ -3,17 +3,12 @@ import { SourceBadge } from './SectionCard'
 import { formatRands } from '../lib/money'
 
 export function CashPositionCard({
-  expectedCents,
-  expectedCount,
   fnbCents,
   yocoSavingsCents,
   expectedPayoutCents,
   protectedCents,
   safeToUseCents,
 }: {
-  /** Sum of Yoco payouts not yet reflected as a bank credit (status !== paid). */
-  expectedCents: number
-  expectedCount: number
   /** FNB operating balance from latest cash snapshot. */
   fnbCents: number
   /** Yoco Savings balance from latest cash snapshot. */
@@ -25,9 +20,7 @@ export function CashPositionCard({
   /** Safe to use = (FNB + expected) − protected − committed. */
   safeToUseCents: number
 }) {
-  const hasExpected = expectedCount > 0 || expectedPayoutCents > 0
   const hasCash = fnbCents > 0 || yocoSavingsCents > 0
-
   const availableCents = fnbCents + yocoSavingsCents
 
   return (
@@ -77,13 +70,9 @@ export function CashPositionCard({
         />
         <Figure
           label="Expected"
-          hint={
-            hasExpected
-              ? `${expectedCount || 1} Yoco payout${(expectedCount || 1) === 1 ? '' : 's'} not yet in the bank`
-              : 'Yoco payouts not yet settled'
-          }
-          value={hasExpected ? formatRands(expectedPayoutCents) : '—'}
-          muted={!hasExpected}
+          hint="Yoco payouts not yet settled"
+          value={expectedPayoutCents > 0 ? formatRands(expectedPayoutCents) : '—'}
+          muted={expectedPayoutCents === 0}
         />
         <Figure
           label="Safe to use"

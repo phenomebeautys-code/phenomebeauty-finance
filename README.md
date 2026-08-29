@@ -1,88 +1,46 @@
-# PhenomeBeauty Finance
+# Phenome Beauty Finance
 
-Phase 1 of the finance app: a place to record what a client paid and see how
-much of it was service revenue against how much was product revenue, even
-when both happened in the same appointment and the same Yoco payment.
+A private finance-control application for Phenome Beauty. It consolidates normalized sales, Yoco payments and payouts, reconciliation, cash protection, expenses, and vehicle-settlement tracking.
 
-This follows the model agreed on before any automation:
+## Production Supabase project
 
-- NextSlot stays the source of truth for services, call outs and bookings.
-- Shop Admin stays the source of truth for products and retail stock.
-- This finance app is where a sale is captured once, split into lines, and
-  marked as matched to a Yoco payment or left for review.
-- Nothing here writes back to NextSlot or Shop Admin. It reads and records
-  summaries only.
+Production is Supabase project `pzrhvbxjgjucqxnrofgj`:
 
-Run this manually for a few weeks before wiring up the Yoco and NextSlot
-syncs mentioned in the wider finance plan.
-
-## What is here
-
-- `src/pages/Dashboard.tsx` — this month's service, call out and product
-  revenue, plus a split bar showing the proportion of each.
-- `src/pages/NewSale.tsx` — the capture form. One sale, several lines, with a
-  check against the total the client actually paid.
-- `src/pages/SalesLedgerPage.tsx` — every sale recorded, filterable by
-  reconciliation status.
-- `supabase/migrations/0001_finance_core.sql` — the two tables this runs on,
-  `finance_sales` and `finance_sale_lines`, plus the views the dashboard
-  reads from.
-
-The app runs on sample data out of the box, so it never shows a blank
-screen while Supabase is being set up.
-
-## Setup
-
-1. Install dependencies.
-
-   ```bash
-   npm install
-   ```
-
-2. Create a Supabase project for finance data, separate from the NextSlot
-   and Shop Admin projects, as agreed in the architecture notes.
-
-3. Run the migration in `supabase/migrations/0001_finance_core.sql` against
-   that project, either through the SQL editor or the Supabase CLI.
-
-4. Copy `.env.example` to `.env` and fill in the project URL and anon key.
-
-   ```bash
-   cp .env.example .env
-   ```
-
-5. Start the app.
-
-   ```bash
-   npm run dev
-   ```
-
-## Pushing to GitHub
-
-This was built locally and has not been pushed to
-`phenomebeautys-code/phenomebeauty-finance`, since this session has no
-write access to that repository. To get it there:
-
-```bash
-git init
-git remote add origin https://github.com/phenomebeautys-code/phenomebeauty-finance.git
-git add .
-git commit -m "Phase 1: sale capture and revenue split dashboard"
-git branch -M main
-git push -u origin main
+```env
+VITE_SUPABASE_URL=https://pzrhvbxjgjucqxnrofgj.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_<your-public-browser-key>
 ```
 
-If the repository already has a placeholder commit, pull first or push with
-`--force` only once you are sure the placeholder is disposable.
+Configure both values in Vercel for Production, Preview, and Development as appropriate. Use the project’s browser publishable key. Never expose a `service_role` key through a `VITE_*` variable.
 
-## Next steps, in order
+## Authentication and financial-data access
 
-1. Run this manually for two to four weeks. Check how often a Yoco payment
-   comes in without a matching booking or product sale.
-2. Add the `finance-export-nextslot` and `finance-export-shop` edge
-   functions described in the architecture plan, so completed bookings and
-   shop orders can be pulled in rather than typed in by hand.
-3. Add the Yoco API import for payments and payouts, and match them against
-   sales here rather than trusting the gross amount typed on capture.
-4. Only after that, add FNB statement import and the 60/40 month end
-   allocation view.
+All browser access to the finance product requires a signed-in Supabase Auth user. The client persists and automatically refreshes the user session, so requests made by `useSales`, `useFinanceData`, and `useVehicleData` include the current access token. The database uses authenticated-only Row Level Security policies for finance data.
+
+Create/manage users in **Supabase Dashboard → Authentication → Users** for project `pzrhvbxjgjucqxnrofgj`.
+
+## Database model
+
+The production database uses the `public` schema. Its primary tables include:
+
+- `finance_sales` and `finance_sale_lines` for the finance ledger
+- `yoco_payments`, `yoco_payouts`, and `yoco_sync_runs` for Yoco records
+- `finance_reconciliation_matches` and FNB-import tables for reconciliation
+- `finance_pockets`, `finance_pocket_snapshots`, and `finance_pocket_movements` for protected cash
+- `finance_vehicles`, `finance_vehicle_odometer_entries`, `finance_vehicle_trips`, and `finance_vehicle_contributions` for mobility tracking
+
+Source-mirror tables are ingestion internals. They should not be read directly by browser code unless their RLS model is deliberately changed.
+
+## Migration note
+
+The production database migrations were applied directly in the Supabase project. Files under `supabase/migrations-archive/incorrect-nonproduction-schema/` are archived investigation artifacts; they target a non-production `finance.*` schema and must not be replayed.
+
+## Local development
+
+```bash
+npm install
+cp .env.example .env
+npm run dev
+```
+
+Set the two Vite variables before running the app.

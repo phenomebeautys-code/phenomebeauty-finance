@@ -1,0 +1,3 @@
+-- ARCHIVED: Incorrect non-production migration.
+-- This file intentionally contains no executable schema changes.
+-- See README.md in this directory.

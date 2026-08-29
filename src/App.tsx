@@ -28,7 +28,7 @@ const TAB_LABELS: Record<Tab, string> = {
   ledger: 'Transactions',
 }
 
-function AuthenticatedApp() {
+function AuthenticatedApp({ user }: { user: User }) {
   const [tab, setTab] = useState<Tab>('dashboard')
   const [checkingIn, setCheckingIn] = useState(false)
   const { sales, loading, usingDemoData, refresh } = useSales()
@@ -61,15 +61,6 @@ function AuthenticatedApp() {
 
   const isLoading = loading || finance.loading || vehicleData.loading
 
-  const [user, setUser] = useState<User | null>(null)
-
-  useEffect(() => {
-    const { subscription } = subscribeToAuthChanges((_event, s) => {
-      setUser(s?.user ?? null)
-    })
-    return () => subscription.unsubscribe()
-  }, [])
-
   const handleSignOut = async () => {
     await signOut()
   }
@@ -83,12 +74,10 @@ function AuthenticatedApp() {
           </h1>
           <p className="shell-subtitle">What can the business safely afford to do right now.</p>
         </div>
-        {user && (
-          <div className="shell-user">
-            <span>{user.email}</span>
-            <button className="shell-signout" onClick={handleSignOut}>Sign out</button>
-          </div>
-        )}
+        <div className="shell-user">
+          <span>{user.email}</span>
+          <button className="shell-signout" onClick={handleSignOut}>Sign out</button>
+        </div>
         <nav className="shell-tabs">
           {(Object.keys(TAB_LABELS) as Tab[]).map((t) => (
             <button key={t} className="shell-tab" data-active={tab === t} onClick={() => setTab(t)}>
@@ -101,7 +90,7 @@ function AuthenticatedApp() {
       <main className="shell-main">
         {usingDemoData && (
           <div className="banner">
-            Showing sample data. Connect a Supabase project in <code>.env</code> to record real sales.
+            Showing sample data. Set the Vite Supabase variables to use production data.
           </div>
         )}
         {finance.error && (
@@ -176,32 +165,42 @@ function AuthenticatedApp() {
 
 function App() {
   const [authState, setAuthState] = useState<'loading' | 'authenticated' | 'unauthenticated'>('loading')
+  const [user, setUser] = useState<User | null>(null)
 
   useEffect(() => {
-    getSession().then((s) => {
-      setAuthState(s ? 'authenticated' : 'unauthenticated')
+    let active = true
+
+    getSession().then((session) => {
+      if (!active) return
+      setUser(session?.user ?? null)
+      setAuthState(session ? 'authenticated' : 'unauthenticated')
     })
 
-    const { subscription } = subscribeToAuthChanges((_event, s) => {
-      setAuthState(s ? 'authenticated' : 'unauthenticated')
+    const { subscription } = subscribeToAuthChanges((_event, session) => {
+      if (!active) return
+      setUser(session?.user ?? null)
+      setAuthState(session ? 'authenticated' : 'unauthenticated')
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      active = false
+      subscription.unsubscribe()
+    }
   }, [])
 
   if (authState === 'loading') {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f5f5f5' }}>
-        <div style={{ fontSize: 16, color: '#6b7280' }}>Loading...</div>
+        <div style={{ fontSize: 16, color: '#6b7280' }}>Loading…</div>
       </div>
     )
   }
 
-  if (authState === 'unauthenticated') {
-    return <Login onLoginSuccess={() => setAuthState('authenticated')} />
+  if (authState === 'unauthenticated' || !user) {
+    return <Login onLoginSuccess={() => undefined} />
   }
 
-  return <AuthenticatedApp />
+  return <AuthenticatedApp user={user} />
 }
 
 export default App

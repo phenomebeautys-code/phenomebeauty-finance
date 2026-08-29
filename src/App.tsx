@@ -70,7 +70,7 @@ function AuthenticatedApp({ user }: { user: User }) {
       <header className="shell-header">
         <div>
           <h1 className="shell-title">
-            Phenome<span>Beauty</span> Finance
+            Phenomebeauty Finance
           </h1>
           <p className="shell-subtitle">What can the business safely afford to do right now.</p>
         </div>

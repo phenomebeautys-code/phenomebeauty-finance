@@ -1,15 +1,34 @@
+// src/components/CashPositionCard.tsx
 import { SourceBadge } from './SectionCard'
 import { formatRands } from '../lib/money'
 
 export function CashPositionCard({
   expectedCents,
   expectedCount,
+  fnbCents,
+  yocoSavingsCents,
+  expectedPayoutCents,
+  protectedCents,
+  safeToUseCents,
 }: {
   /** Sum of Yoco payouts not yet reflected as a bank credit (status !== paid). */
   expectedCents: number
   expectedCount: number
+  /** FNB operating balance from latest cash snapshot. */
+  fnbCents: number
+  /** Yoco Savings balance from latest cash snapshot. */
+  yocoSavingsCents: number
+  /** Expected Yoco payout (from snapshot or computed). */
+  expectedPayoutCents: number
+  /** Protected reserves (FNB floor + fuel buffer, etc.). */
+  protectedCents: number
+  /** Safe to use = (FNB + expected) − protected − committed. */
+  safeToUseCents: number
 }) {
-  const hasExpected = expectedCount > 0
+  const hasExpected = expectedCount > 0 || expectedPayoutCents > 0
+  const hasCash = fnbCents > 0 || yocoSavingsCents > 0
+
+  const availableCents = fnbCents + yocoSavingsCents
 
   return (
     <section
@@ -33,7 +52,7 @@ export function CashPositionCard({
         >
           Business cash position
         </div>
-        <SourceBadge state="not_connected" />
+        <SourceBadge state={hasCash ? 'live' : 'not_connected'} />
       </div>
 
       <div
@@ -44,24 +63,39 @@ export function CashPositionCard({
           marginTop: 16,
         }}
       >
-        <Figure label="Available now" hint="FNB operating cash + Yoco Savings" value="—" muted />
-        <Figure label="Protected" hint="Reserves that are not for spending" value="—" muted />
+        <Figure
+          label="Available now"
+          hint="FNB operating cash + Yoco Savings"
+          value={hasCash ? formatRands(availableCents) : '—'}
+          muted={!hasCash}
+        />
+        <Figure
+          label="Protected"
+          hint="Reserves that are not for spending"
+          value={protectedCents > 0 ? formatRands(protectedCents) : '—'}
+          muted={protectedCents === 0}
+        />
         <Figure
           label="Expected"
           hint={
             hasExpected
-              ? `${expectedCount} Yoco payout${expectedCount === 1 ? '' : 's'} not yet in the bank`
+              ? `${expectedCount || 1} Yoco payout${(expectedCount || 1) === 1 ? '' : 's'} not yet in the bank`
               : 'Yoco payouts not yet settled'
           }
-          value={hasExpected ? formatRands(expectedCents) : '—'}
+          value={hasExpected ? formatRands(expectedPayoutCents) : '—'}
           muted={!hasExpected}
         />
-        <Figure label="Safe to use" hint="Available − protected − committed" value="—" muted />
+        <Figure
+          label="Safe to use"
+          hint="Available − protected − committed"
+          value={hasCash ? formatRands(safeToUseCents) : '—'}
+          muted={!hasCash}
+        />
       </div>
 
       <p style={{ fontSize: 13, color: 'var(--ink-soft)', margin: '16px 0 0', lineHeight: 1.5 }}>
-        {hasExpected
-          ? 'Expected cash is live from Yoco payouts. Available, protected, and safe-to-use still need FNB and Yoco Savings connected under Sync & Integrations before they can be calculated.'
+        {hasCash
+          ? 'Cash position is live from your latest snapshot. Expected cash is computed from Yoco payouts not yet settled.'
           : 'Cash position needs FNB and Yoco Savings connected under Sync & Integrations. Once those are live, this card will show available, protected, expected and safe-to-use cash as separate figures — never combined into one number.'}
       </p>
     </section>

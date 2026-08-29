@@ -21,16 +21,12 @@ function monthLabel(dateStr: string): string {
 
 export function Overview({
   sales,
-  expectedCents,
-  expectedCount,
   reconciliationExceptions,
   syncStale,
   vehicle,
   vehicleReserveCents,
 }: {
   sales: FinanceSaleWithLines[]
-  expectedCents: number
-  expectedCount: number
   reconciliationExceptions: number
   syncStale: boolean
   vehicle: FinanceVehicle | null

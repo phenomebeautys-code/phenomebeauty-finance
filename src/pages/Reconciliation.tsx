@@ -22,62 +22,164 @@ export function Reconciliation({
   matches,
   bankImports,
   payouts,
+  onImportFNB,
 }: {
   matches: ReconciliationMatch[]
   bankImports: FinanceBankImport[]
   payouts: YocoPayout[]
+  onImportFNB: () => void
 }) {
   const counts = useMemo(() => {
-    const byStatus: Record<MatchStatus, number> = { confirmed: 0, suggested: 0, broken: 0, rejected: 0 }
-    for (const m of matches) byStatus[m.status]++
+    const byStatus: Record<MatchStatus, number> = {
+      confirmed: 0,
+      suggested: 0,
+      broken: 0,
+      rejected: 0,
+    }
+
+    for (const match of matches) {
+      byStatus[match.status]++
+    }
+
     return byStatus
   }, [matches])
 
-  const needsAttention = matches.filter((m) => m.status === 'suggested' || m.status === 'broken')
-  const unpaidPayouts = payouts.filter((p) => p.status !== 'paid')
+  const needsAttention = useMemo(
+    () => matches.filter((match) => match.status === 'suggested' || match.status === 'broken'),
+    [matches]
+  )
+
+  const unpaidPayouts = useMemo(
+    () => payouts.filter((payout) => payout.status !== 'paid'),
+    [payouts]
+  )
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <header>
-        <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 20, margin: '0 0 4px' }}>
-          Reconciliation
-        </h2>
-        <p style={{ margin: 0, color: 'var(--ink-soft)', fontSize: 14 }}>
-          Matches bookings and orders to Yoco payments, Yoco payouts to bank credits, and flags
-          anything unmatched.
-        </p>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+            gap: 16,
+            flexWrap: 'wrap',
+          }}
+        >
+          <div>
+            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 20, margin: '0 0 4px' }}>
+              Reconciliation
+            </h2>
+            <p style={{ margin: 0, color: 'var(--ink-soft)', fontSize: 14, maxWidth: 760 }}>
+              Match bookings and orders to Yoco payments, Yoco payouts to bank credits, and review
+              anything unmatched.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onImportFNB}
+            style={{
+              appearance: 'none',
+              border: 'none',
+              borderRadius: 8,
+              background: 'var(--ink)',
+              color: 'var(--paper)',
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              fontSize: 13,
+              fontWeight: 700,
+              padding: '10px 14px',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Import FNB statement
+          </button>
+        </div>
       </header>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gap: 14,
+        }}
+      >
         <MiniStat label="Confirmed" value={counts.confirmed} tone="good" />
         <MiniStat label="Suggested" value={counts.suggested} tone="clay" />
         <MiniStat label="Broken" value={counts.broken} tone="warn" />
         <MiniStat label="Rejected" value={counts.rejected} tone="neutral" />
       </div>
 
-      {/* FNB import / closing balance verification — no imports yet */}
       <SectionCard
         eyebrow="FNB import"
-        title="Closing balance verification"
+        title="Statements and closing-balance verification"
         status={<SourceBadge state={bankImports.length > 0 ? 'live' : 'not_connected'} />}
       >
         {bankImports.length === 0 ? (
-          <NotConnectedNote>
-            No FNB statement has been imported yet. Import a CSV to begin matching payouts and
-            bank credits.
-          </NotConnectedNote>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 12 }}>
+            <NotConnectedNote>
+              No FNB statement has been imported yet. Upload an FNB PDF to parse the statement,
+              verify its opening and closing balances, and begin matching bank credits.
+            </NotConnectedNote>
+
+            <button
+              type="button"
+              onClick={onImportFNB}
+              style={{
+                appearance: 'none',
+                border: '1px solid var(--line)',
+                borderRadius: 7,
+                background: 'var(--paper-raised)',
+                color: 'var(--ink)',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                fontSize: 13,
+                fontWeight: 700,
+                padding: '9px 12px',
+              }}
+            >
+              Upload FNB PDF
+            </button>
+          </div>
         ) : (
-          bankImports.map((b) => (
-            <FigureRow
-              key={b.id}
-              label={`${b.source_filename} · ${b.statement_start_date ?? '?'} – ${b.statement_end_date ?? '?'}`}
-              value={b.closing_balance_cents != null ? formatRands(b.closing_balance_cents) : '—'}
-            />
-          ))
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {bankImports.map((bankImport) => (
+              <FigureRow
+                key={bankImport.id}
+                label={`${bankImport.source_filename} · ${bankImport.statement_start_date ?? '?'} – ${bankImport.statement_end_date ?? '?'}`}
+                value={
+                  bankImport.closing_balance_cents != null
+                    ? formatRands(bankImport.closing_balance_cents)
+                    : '—'
+                }
+              />
+            ))}
+
+            <button
+              type="button"
+              onClick={onImportFNB}
+              style={{
+                alignSelf: 'flex-start',
+                appearance: 'none',
+                border: '1px solid var(--line)',
+                borderRadius: 7,
+                background: 'var(--paper-raised)',
+                color: 'var(--ink)',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                fontSize: 13,
+                fontWeight: 700,
+                marginTop: 4,
+                padding: '9px 12px',
+              }}
+            >
+              Import another FNB statement
+            </button>
+          </div>
         )}
       </SectionCard>
 
-      {/* Yoco payouts pending bank confirmation */}
       <SectionCard
         eyebrow="Yoco payouts"
         title="Awaiting bank confirmation"
@@ -88,14 +190,15 @@ export function Reconciliation({
             All known Yoco payouts are confirmed against the bank.
           </p>
         ) : (
-          unpaidPayouts.slice(0, 8).map((p) => (
+          unpaidPayouts.slice(0, 8).map((payout) => (
             <FigureRow
-              key={p.id}
-              label={`${p.payout_date ?? 'Pending'} · ${p.status}`}
-              value={formatRands(p.net_amount_cents)}
+              key={payout.id}
+              label={`${payout.payout_date ?? 'Pending'} · ${payout.status}`}
+              value={formatRands(payout.net_amount_cents)}
             />
           ))
         )}
+
         {unpaidPayouts.length > 8 && (
           <p style={{ fontSize: 12, color: 'var(--ink-soft)', margin: '8px 0 0' }}>
             +{unpaidPayouts.length - 8} more
@@ -103,45 +206,52 @@ export function Reconciliation({
         )}
       </SectionCard>
 
-      {/* Exception queue */}
       <SectionCard
         eyebrow="Exception queue"
         title={`${needsAttention.length} ${needsAttention.length === 1 ? 'item needs' : 'items need'} review`}
       >
         {needsAttention.length === 0 ? (
-          <p style={{ fontSize: 13, color: 'var(--ink-soft)', margin: 0 }}>Nothing outstanding.</p>
+          <p style={{ fontSize: 13, color: 'var(--ink-soft)', margin: 0 }}>
+            Nothing outstanding.
+          </p>
         ) : (
           <div style={{ border: '1px solid var(--line)', borderRadius: 6, overflow: 'hidden' }}>
-            {needsAttention.slice(0, 25).map((m, i) => (
+            {needsAttention.slice(0, 25).map((match, index) => (
               <div
-                key={m.id}
+                key={match.id}
                 style={{
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
                   gap: 12,
                   padding: '10px 14px',
-                  borderTop: i === 0 ? 'none' : '1px solid var(--line)',
+                  borderTop: index === 0 ? 'none' : '1px solid var(--line)',
                 }}
               >
                 <div>
-                  <div style={{ fontSize: 13.5 }}>{MATCH_TYPE_LABELS[m.match_type]}</div>
-                  {m.notes && (
-                    <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 2 }}>{m.notes}</div>
+                  <div style={{ fontSize: 13.5 }}>{MATCH_TYPE_LABELS[match.match_type]}</div>
+
+                  {match.notes && (
+                    <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 2 }}>
+                      {match.notes}
+                    </div>
                   )}
                 </div>
+
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  {m.matched_amount_cents != null && (
+                  {match.matched_amount_cents != null && (
                     <span className="tabular" style={{ fontSize: 13, fontWeight: 600 }}>
-                      {formatRands(m.matched_amount_cents)}
+                      {formatRands(match.matched_amount_cents)}
                     </span>
                   )}
-                  <Pill label={STATUS_TONE[m.status].label} tone={STATUS_TONE[m.status].tone} />
+
+                  <Pill label={STATUS_TONE[match.status].label} tone={STATUS_TONE[match.status].tone} />
                 </div>
               </div>
             ))}
           </div>
         )}
+
         {needsAttention.length > 25 && (
           <p style={{ fontSize: 12, color: 'var(--ink-soft)', margin: '8px 0 0' }}>
             +{needsAttention.length - 25} more
@@ -152,13 +262,22 @@ export function Reconciliation({
   )
 }
 
-function MiniStat({ label, value, tone }: { label: string; value: number; tone: 'good' | 'warn' | 'clay' | 'neutral' }) {
-  const c = {
+function MiniStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string
+  value: number
+  tone: 'good' | 'warn' | 'clay' | 'neutral'
+}) {
+  const color = {
     good: 'var(--good)',
     warn: 'var(--warn)',
     clay: 'var(--clay)',
     neutral: 'var(--ink-soft)',
   }[tone]
+
   return (
     <div
       style={{
@@ -168,10 +287,26 @@ function MiniStat({ label, value, tone }: { label: string; value: number; tone: 
         padding: '14px 16px',
       }}
     >
-      <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--ink-soft)' }}>
+      <div
+        style={{
+          fontSize: 11,
+          textTransform: 'uppercase',
+          letterSpacing: '0.06em',
+          color: 'var(--ink-soft)',
+        }}
+      >
         {label}
       </div>
-      <div className="tabular" style={{ fontFamily: 'var(--font-display)', fontSize: 24, color: c, marginTop: 4 }}>
+
+      <div
+        className="tabular"
+        style={{
+          fontFamily: 'var(--font-display)',
+          fontSize: 24,
+          color,
+          marginTop: 4,
+        }}
+      >
         {value}
       </div>
     </div>

@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { supabase } from '../lib/supabase'
 import { extractTextFromPDF, parseFNBStatementText } from '../lib/fnbParser'
 import { uploadFNBPDF, saveParsedRows, confirmFNBImport, finalizeFNBImport } from '../lib/fnb'
 import type { FNBParseResult, ParsedTransaction } from '../lib/types-fnb'

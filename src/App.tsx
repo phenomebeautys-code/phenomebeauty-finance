@@ -15,12 +15,16 @@ import { ProtectedCash } from './pages/ProtectedCash'
 import { ExpensesAndAdvances } from './pages/ExpensesAndAdvances'
 import { VehicleMobility } from './pages/VehicleMobility'
 import { OdometerCheckIn } from './pages/OdometerCheckIn'
+import FNBImport from './pages/FNBImport'
 import { BottomNav, type Tab } from './components/BottomNav'
 
-const TAB_LABELS: Record<Tab, string> = {
+type AppTab = Tab | 'fnb-import'
+
+const TAB_LABELS: Record<AppTab, string> = {
   dashboard: 'Overview',
   vehicle: 'Vehicle & Mobility',
   reconciliation: 'Reconciliation',
+  'fnb-import': 'Import FNB statement',
   'protected-cash': 'Protected Cash',
   expenses: 'Expenses & Advances',
   sync: 'Sync & Integrations',
@@ -29,7 +33,7 @@ const TAB_LABELS: Record<Tab, string> = {
 }
 
 function AuthenticatedApp({ user }: { user: User }) {
-  const [tab, setTab] = useState<Tab>('dashboard')
+  const [tab, setTab] = useState<AppTab>('dashboard')
   const [checkingIn, setCheckingIn] = useState(false)
   const [backfillWeek, setBackfillWeek] = useState<{ start: Date; end: Date } | null>(null)
   const { sales, loading, usingDemoData, refresh } = useSales()
@@ -58,6 +62,10 @@ function AuthenticatedApp({ user }: { user: User }) {
     await signOut()
   }
 
+  const handleBottomNavChange = (nextTab: Tab) => {
+    setTab(nextTab)
+  }
+
   return (
     <>
       <header className="shell-header">
@@ -72,7 +80,7 @@ function AuthenticatedApp({ user }: { user: User }) {
           <button className="shell-signout" onClick={handleSignOut}>Sign out</button>
         </div>
         <nav className="shell-tabs">
-          {(Object.keys(TAB_LABELS) as Tab[]).map((t) => (
+          {(Object.keys(TAB_LABELS) as AppTab[]).map((t) => (
             <button key={t} className="shell-tab" data-active={tab === t} onClick={() => setTab(t)}>
               {TAB_LABELS[t]}
             </button>
@@ -86,6 +94,7 @@ function AuthenticatedApp({ user }: { user: User }) {
             Showing sample data. Set the Vite Supabase variables to use production data.
           </div>
         )}
+
         {finance.error && (
           <div className="banner">Some finance data could not load: {finance.error}</div>
         )}
@@ -103,8 +112,11 @@ function AuthenticatedApp({ user }: { user: User }) {
                 vehicleReserveCents={vehicleReserveCents}
               />
             )}
+
             {tab === 'new-sale' && <NewSale onSaved={refresh} />}
+
             {tab === 'ledger' && <SalesLedgerPage sales={sales} onChanged={refresh} />}
+
             {tab === 'reconciliation' && (
               <Reconciliation
                 matches={finance.reconciliationMatches}
@@ -112,13 +124,19 @@ function AuthenticatedApp({ user }: { user: User }) {
                 payouts={finance.yocoPayouts}
               />
             )}
+
+            {tab === 'fnb-import' && <FNBImport />}
+
             {tab === 'protected-cash' && (
               <ProtectedCash pockets={finance.pockets} snapshots={finance.pocketSnapshots} />
             )}
+
             {tab === 'expenses' && (
               <ExpensesAndAdvances expenses={finance.expenses} advances={finance.advances} />
             )}
+
             {tab === 'sync' && <SyncIntegrations syncRuns={finance.syncRuns} />}
+
             {tab === 'vehicle' &&
               ((checkingIn || backfillWeek) && vehicleData.vehicle ? (
                 <OdometerCheckIn
@@ -155,7 +173,7 @@ function AuthenticatedApp({ user }: { user: User }) {
         <span>FNB, Yoco Savings, expenses and advances are wired up but awaiting data.</span>
       </footer>
 
-      <BottomNav tab={tab} onChange={setTab} />
+      <BottomNav tab={tab === 'fnb-import' ? 'reconciliation' : tab} onChange={handleBottomNavChange} />
     </>
   )
 }

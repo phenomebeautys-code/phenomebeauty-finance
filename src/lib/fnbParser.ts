@@ -1,11 +1,10 @@
 import * as pdfjsLib from 'pdfjs-dist'
-import { ParsedTransaction, FNBStatement, FNBParseResult } from './types-fnb'
+import type { ParsedTransaction, FNBStatement, FNBParseResult } from './types-fnb'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
 
 function parseAmount(amountStr: string): { cents: number; direction: 'credit' | 'debit' } | null {
   const trimmed = amountStr.trim()
-  const isCredit = trimmed.endsWith('Cr')
   const isDebit = trimmed.endsWith('Dr')
   const numericPart = trimmed.replace(/Cr|Dr|,/g, '').trim()
   const amount = parseFloat(numericPart)

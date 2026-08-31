@@ -41,18 +41,22 @@ function AuthenticatedApp({ user }: { user: User }) {
   const vehicleData = useVehicleData()
 
   const reconciliationExceptions = useMemo(
-    () => finance.reconciliationMatches.filter((m) => m.status === 'suggested' || m.status === 'broken').length,
+    () => finance.reconciliationMatches.filter((match) => match.status === 'suggested' || match.status === 'broken').length,
     [finance.reconciliationMatches]
   )
 
   const syncStale = useMemo(() => {
     const last = finance.syncRuns[0]
-    if (!last) return false
+
+    if (!last) {
+      return false
+    }
+
     return last.status === 'failed' || last.status === 'completed_with_errors'
   }, [finance.syncRuns])
 
   const vehicleReserveCents = useMemo(
-    () => vehicleData.contributions.reduce((sum, c) => sum + c.amount_cents, 0),
+    () => vehicleData.contributions.reduce((sum, contribution) => sum + contribution.amount_cents, 0),
     [vehicleData.contributions]
   )
 
@@ -70,19 +74,26 @@ function AuthenticatedApp({ user }: { user: User }) {
     <>
       <header className="shell-header">
         <div>
-          <h1 className="shell-title">
-            Phenomebeauty Finance
-          </h1>
+          <h1 className="shell-title">Phenomebeauty Finance</h1>
           <p className="shell-subtitle">What can the business safely afford to do right now.</p>
         </div>
+
         <div className="shell-user">
           <span>{user.email}</span>
-          <button className="shell-signout" onClick={handleSignOut}>Sign out</button>
+          <button className="shell-signout" onClick={handleSignOut}>
+            Sign out
+          </button>
         </div>
+
         <nav className="shell-tabs">
-          {(Object.keys(TAB_LABELS) as AppTab[]).map((t) => (
-            <button key={t} className="shell-tab" data-active={tab === t} onClick={() => setTab(t)}>
-              {TAB_LABELS[t]}
+          {(Object.keys(TAB_LABELS) as AppTab[]).map((currentTab) => (
+            <button
+              key={currentTab}
+              className="shell-tab"
+              data-active={tab === currentTab}
+              onClick={() => setTab(currentTab)}
+            >
+              {TAB_LABELS[currentTab]}
             </button>
           ))}
         </nav>
@@ -96,7 +107,9 @@ function AuthenticatedApp({ user }: { user: User }) {
         )}
 
         {finance.error && (
-          <div className="banner">Some finance data could not load: {finance.error}</div>
+          <div className="banner">
+            Some finance data could not load: {finance.error}
+          </div>
         )}
 
         {isLoading ? (
@@ -122,17 +135,24 @@ function AuthenticatedApp({ user }: { user: User }) {
                 matches={finance.reconciliationMatches}
                 bankImports={finance.bankImports}
                 payouts={finance.yocoPayouts}
+                onImportFNB={() => setTab('fnb-import')}
               />
             )}
 
             {tab === 'fnb-import' && <FNBImport />}
 
             {tab === 'protected-cash' && (
-              <ProtectedCash pockets={finance.pockets} snapshots={finance.pocketSnapshots} />
+              <ProtectedCash
+                pockets={finance.pockets}
+                snapshots={finance.pocketSnapshots}
+              />
             )}
 
             {tab === 'expenses' && (
-              <ExpensesAndAdvances expenses={finance.expenses} advances={finance.advances} />
+              <ExpensesAndAdvances
+                expenses={finance.expenses}
+                advances={finance.advances}
+              />
             )}
 
             {tab === 'sync' && <SyncIntegrations syncRuns={finance.syncRuns} />}
@@ -161,7 +181,7 @@ function AuthenticatedApp({ user }: { user: User }) {
                   contributions={vehicleData.contributions}
                   callOutSummary={vehicleData.callOutSummary}
                   onCheckIn={() => setCheckingIn(true)}
-                  onBackfillWeek={(w) => setBackfillWeek(w)}
+                  onBackfillWeek={(week) => setBackfillWeek(week)}
                 />
               ))}
           </>
@@ -173,7 +193,10 @@ function AuthenticatedApp({ user }: { user: User }) {
         <span>FNB, Yoco Savings, expenses and advances are wired up but awaiting data.</span>
       </footer>
 
-      <BottomNav tab={tab === 'fnb-import' ? 'reconciliation' : tab} onChange={handleBottomNavChange} />
+      <BottomNav
+        tab={tab === 'fnb-import' ? 'reconciliation' : tab}
+        onChange={handleBottomNavChange}
+      />
     </>
   )
 }
@@ -186,13 +209,19 @@ function App() {
     let active = true
 
     getSession().then((session) => {
-      if (!active) return
+      if (!active) {
+        return
+      }
+
       setUser(session?.user ?? null)
       setAuthState(session ? 'authenticated' : 'unauthenticated')
     })
 
     const { subscription } = subscribeToAuthChanges((_event, session) => {
-      if (!active) return
+      if (!active) {
+        return
+      }
+
       setUser(session?.user ?? null)
       setAuthState(session ? 'authenticated' : 'unauthenticated')
     })
@@ -205,7 +234,15 @@ function App() {
 
   if (authState === 'loading') {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f5f5f5' }}>
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: '#f5f5f5',
+        }}
+      >
         <div style={{ fontSize: 16, color: '#6b7280' }}>Loading…</div>
       </div>
     )

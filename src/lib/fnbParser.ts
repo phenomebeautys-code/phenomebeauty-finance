@@ -1,179 +1,526 @@
 import * as pdfjsLib from 'pdfjs-dist'
-import type { ParsedTransaction, FNBStatement, FNBParseResult } from './types-fnb'
+import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+import type { FNBParseResult, FNBStatement, ParsedTransaction } from './types-fnb'
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker
 
-function parseAmount(amountStr: string): { cents: number; direction: 'credit' | 'debit' } | null {
-  const trimmed = amountStr.trim()
-  const isDebit = trimmed.endsWith('Dr')
-  const numericPart = trimmed.replace(/Cr|Dr|,/g, '').trim()
-  const amount = parseFloat(numericPart)
-  if (isNaN(amount)) return null
-  return { cents: Math.round(amount * 100), direction: isDebit ? 'debit' : 'credit' }
+type MoneyValue = {
+  cents: number
+  marker: 'credit' | 'debit' | null
 }
 
-function categorizeTransaction(description: string): { category: string; confidence: number } {
-  const lower = description.toLowerCase()
-  if (lower.includes('magtape credit yoco')) return { category: 'yoco_payout', confidence: 0.95 }
-  if (lower.includes('payshap credit yoco pockets')) return { category: 'yoco_pocket_transfer', confidence: 0.95 }
-  if (lower.includes('pos purchase yoco')) return { category: 'business_expense', confidence: 0.85 }
-  if (lower.includes('fuel purchase')) return { category: 'fuel', confidence: 0.9 }
-  if (lower.includes('electricity prepaid')) return { category: 'utilities', confidence: 0.9 }
-  if (lower.includes('fnb app payment to foazia')) return { category: 'owner_advance', confidence: 0.8 }
-  if (lower.includes('fnb app transfer from arshad')) return { category: 'owner_transfer', confidence: 0.85 }
-  if (lower.includes('fnb app rtc pmt to car')) return { category: 'vehicle_finance', confidence: 0.85 }
-  if (lower.includes('debicheck internal')) return { category: 'direct_debit', confidence: 0.8 }
-  if (lower.includes('edo collection attempt')) return { category: 'collection', confidence: 0.8 }
-  if (lower.includes('pos purchase dischem')) return { category: 'health_pharmacy', confidence: 0.85 }
-  if (lower.includes('pos purchase checkers') || lower.includes('pos purchase spar')) return { category: 'groceries', confidence: 0.85 }
-  if (lower.includes('service fees')) return { category: 'bank_fees', confidence: 0.9 }
-  return { category: 'other', confidence: 0.5 }
+type TransactionBlock = {
+  date: string
+  lines: string[]
 }
 
-export async function extractTextFromPDF(file: File): Promise<string> {
-  const arrayBuffer = await file.arrayBuffer()
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
-  let fullText = ''
-  
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i)
-    const textContent = await page.getTextContent()
-    const pageText = textContent.items.map((item: any) => item.str).join(' ')
-    fullText += pageText + '\n'
+const MONTHS: Record<string, number> = {
+  jan: 0,
+  feb: 1,
+  mar: 2,
+  apr: 3,
+  may: 4,
+  jun: 5,
+  jul: 6,
+  aug: 7,
+  sep: 8,
+  oct: 9,
+  nov: 10,
+  dec: 11,
+}
+
+const TRANSACTION_DATE_PATTERN = /^(\d{2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)$/i
+const MONEY_PATTERN = /^(\d{1,3}(?:,\d{3})*|\d+)\.(\d{2})\s*(Cr|Dr)?$/i
+const CARD_REFERENCE_PATTERN = /^\d{4,}\*+\d+(?:\s+\d{2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec))?$/i
+const PAGE_OR_COLUMN_HEADER_PATTERN =
+  /^(Date|Description|Amount|Balance|Accrued|Bank|Charges|Transactions in RAND \(ZAR\)|Transactions in RAND \(ZAR\)\s*:.*)$/i
+
+function normaliseWhitespace(value: string) {
+  return value.replace(/\s+/g, ' ').trim()
+}
+
+function parseMoney(value: string): MoneyValue | null {
+  const match = normaliseWhitespace(value).match(MONEY_PATTERN)
+
+  if (!match) {
+    return null
   }
-  
-  return fullText
+
+  const whole = match[1].replace(/,/g, '')
+  const cents = Number.parseInt(whole, 10) * 100 + Number.parseInt(match[2], 10)
+  const suffix = match[3]?.toLowerCase()
+
+  return {
+    cents,
+    marker: suffix === 'cr' ? 'credit' : suffix === 'dr' ? 'debit' : null,
+  }
+}
+
+function parseDate(day: string, monthName: string, statementEndDate: Date) {
+  const month = MONTHS[monthName.toLowerCase()]
+
+  if (month === undefined) {
+    throw new Error(`Unsupported FNB transaction month: ${monthName}`)
+  }
+
+  const statementYear = statementEndDate.getFullYear()
+  const statementEndMonth = statementEndDate.getMonth()
+  const transactionYear = month > statementEndMonth ? statementYear - 1 : statementYear
+
+  return new Date(Date.UTC(transactionYear, month, Number.parseInt(day, 10)))
+    .toISOString()
+    .slice(0, 10)
+}
+
+function parseStatementDate(value: string) {
+  const match = normaliseWhitespace(value).match(/^(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\s+(\d{4})$/i)
+
+  if (!match) {
+    return null
+  }
+
+  const month = MONTHS[match[2].toLowerCase()]
+
+  if (month === undefined) {
+    return null
+  }
+
+  return new Date(Date.UTC(Number.parseInt(match[3], 10), month, Number.parseInt(match[1], 10)))
+}
+
+function extractStatementPeriod(text: string) {
+  const periodMatch = text.match(
+    /Statement Period\s*:\s*(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\s+\d{4})\s+to\s+(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\s+\d{4})/i
+  )
+
+  if (!periodMatch) {
+    return {
+      start: null,
+      end: null,
+    }
+  }
+
+  return {
+    start: parseStatementDate(periodMatch[1]),
+    end: parseStatementDate(periodMatch[2]),
+  }
+}
+
+function findNextMoneyLine(lines: string[], startIndex: number) {
+  for (let index = startIndex; index < lines.length; index += 1) {
+    const money = parseMoney(lines[index])
+
+    if (money) {
+      return {
+        index,
+        money,
+      }
+    }
+  }
+
+  return null
+}
+
+function extractBalanceAfterLabel(lines: string[], label: string) {
+  const labelIndex = lines.findIndex((line) => normaliseWhitespace(line).toLowerCase() === label.toLowerCase())
+
+  if (labelIndex === -1) {
+    return null
+  }
+
+  const match = findNextMoneyLine(lines, labelIndex + 1)
+
+  return match?.money.cents ?? null
+}
+
+function extractAccountNumber(text: string) {
+  const accountMatch = text.match(/FNB Aspire Current Account\s*:\s*(\d+)/i)
+
+  if (accountMatch) {
+    return accountMatch[1]
+  }
+
+  const fallbackMatch = text.match(/Account Number\s*[\r\n]+\s*\d+\s*[\r\n]+\s*(\d{8,})/i)
+
+  return fallbackMatch?.[1] ?? null
+}
+
+function extractBranchNumber(text: string) {
+  const branchMatch = text.match(/Branch Number\s*[\r\n]+\s*\S+\s*[\r\n]+\s*(\d{3,})/i)
+
+  return branchMatch?.[1] ?? null
+}
+
+function extractStatementNumber(text: string) {
+  const statementMatch = text.match(/Tax Invoice\/Statement Number\s*:\s*(\d+)/i)
+
+  return statementMatch?.[1] ?? null
+}
+
+function isTransactionDateLine(line: string) {
+  return TRANSACTION_DATE_PATTERN.test(normaliseWhitespace(line))
+}
+
+function splitTransactionBlocks(lines: string[]) {
+  const blocks: TransactionBlock[] = []
+  let currentBlock: TransactionBlock | null = null
+
+  for (const originalLine of lines) {
+    const line = normaliseWhitespace(originalLine)
+
+    if (!line || PAGE_OR_COLUMN_HEADER_PATTERN.test(line)) {
+      continue
+    }
+
+    if (isTransactionDateLine(line)) {
+      if (currentBlock) {
+        blocks.push(currentBlock)
+      }
+
+      currentBlock = {
+        date: line,
+        lines: [],
+      }
+
+      continue
+    }
+
+    if (currentBlock) {
+      currentBlock.lines.push(line)
+    }
+  }
+
+  if (currentBlock) {
+    blocks.push(currentBlock)
+  }
+
+  return blocks
+}
+
+function isCreditDescription(description: string) {
+  const lower = description.toLowerCase()
+
+  return (
+    lower.includes('magtape credit yoco') ||
+    lower.includes('payshap credit') ||
+    lower.includes('payshapid off-us') ||
+    lower.includes('fnb app transfer from') ||
+    lower.includes('interest') ||
+    lower.includes('refund') ||
+    lower.includes('reversal')
+  )
+}
+
+function isDebitDescription(description: string) {
+  const lower = description.toLowerCase()
+
+  return (
+    lower.includes('pos purchase') ||
+    lower.includes('fuel purchase') ||
+    lower.includes('electricity prepaid') ||
+    lower.includes('fnb app payment to') ||
+    lower.includes('fnb app geo payment to') ||
+    lower.includes('fnb app rtc pmt to') ||
+    lower.includes('send money app') ||
+    lower.includes('debicheck') ||
+    lower.includes('collection attempt') ||
+    lower.includes('service fees') ||
+    lower.includes('cash withdrawal')
+  )
+}
+
+function getDescriptionLines(lines: string[], amountIndex: number) {
+  return lines
+    .slice(0, amountIndex)
+    .filter((line) => {
+      if (PAGE_OR_COLUMN_HEADER_PATTERN.test(line)) {
+        return false
+      }
+
+      if (CARD_REFERENCE_PATTERN.test(line)) {
+        return true
+      }
+
+      return !parseMoney(line)
+    })
+    .map(normaliseWhitespace)
+    .filter(Boolean)
+}
+
+function buildRawReference(descriptionLines: string[]) {
+  const referenceLines = descriptionLines.filter((line) => CARD_REFERENCE_PATTERN.test(line))
+
+  return referenceLines.length > 0 ? referenceLines.join(' ') : null
+}
+
+function categoriseDescription(description: string): {
+  category: string
+  confidenceScore: number
+  parseWarning: string | null
+} {
+  const lower = description.toLowerCase()
+
+  if (lower.includes('magtape credit yoco')) {
+    return {
+      category: 'Yoco payout',
+      confidenceScore: 0.98,
+      parseWarning: null,
+    }
+  }
+
+  if (lower.includes('payshap')) {
+    return {
+      category: 'Client payment',
+      confidenceScore: 0.9,
+      parseWarning: null,
+    }
+  }
+
+  if (lower.includes('fuel purchase') || lower.includes('engen') || lower.includes('bp ') || lower.includes('total ')) {
+    return {
+      category: 'Fuel',
+      confidenceScore: 0.95,
+      parseWarning: null,
+    }
+  }
+
+  if (lower.includes('electricity prepaid')) {
+    return {
+      category: 'Utilities',
+      confidenceScore: 0.95,
+      parseWarning: null,
+    }
+  }
+
+  if (lower.includes('debicheck') || lower.includes('rtc pmt to car') || lower.includes('absa vf')) {
+    return {
+      category: 'Vehicle finance',
+      confidenceScore: 0.9,
+      parseWarning: null,
+    }
+  }
+
+  if (lower.includes('keiko') || lower.includes('logica beauty') || lower.includes('bright packaging') || lower.includes('shop b47') || lower.includes('shop a39')) {
+    return {
+      category: 'Stock and supplies',
+      confidenceScore: 0.85,
+      parseWarning: null,
+    }
+  }
+
+  if (lower.includes('fnb app transfer from') || lower.includes('transfer to pocket') || lower.includes('send money app')) {
+    return {
+      category: 'Transfer',
+      confidenceScore: 0.8,
+      parseWarning: null,
+    }
+  }
+
+  if (lower.includes('checkers') || lower.includes('pnp') || lower.includes('pick n pay') || lower.includes('spar') || lower.includes('woolworths') || lower.includes('kfc') || lower.includes('pizza') || lower.includes('tikka')) {
+    return {
+      category: 'Needs review',
+      confidenceScore: 0.55,
+      parseWarning: 'This merchant may be a business or personal expense. Review its classification.',
+    }
+  }
+
+  return {
+    category: 'Needs review',
+    confidenceScore: 0.35,
+    parseWarning: 'No automatic category match was found. Review this transaction.',
+  }
+}
+
+function parseTransactionBlock(block: TransactionBlock, statementEndDate: Date): ParsedTransaction | null {
+  const dateMatch = normaliseWhitespace(block.date).match(TRANSACTION_DATE_PATTERN)
+
+  if (!dateMatch) {
+    return null
+  }
+
+  const amountEntry = findNextMoneyLine(block.lines, 0)
+
+  if (!amountEntry) {
+    return null
+  }
+
+  const descriptionLines = getDescriptionLines(block.lines, amountEntry.index)
+  const description = descriptionLines.join(' ').trim()
+
+  if (!description) {
+    return null
+  }
+
+  const amount = amountEntry.money
+  const remainingLines = block.lines.slice(amountEntry.index + 1)
+  const nextMoney = findNextMoneyLine(remainingLines, 0)
+  const runningBalanceCents = nextMoney?.money.cents ?? null
+
+  let direction: 'credit' | 'debit'
+
+  if (amount.marker === 'credit') {
+    direction = 'credit'
+  } else if (amount.marker === 'debit') {
+    direction = 'debit'
+  } else if (isCreditDescription(description)) {
+    direction = 'credit'
+  } else if (isDebitDescription(description)) {
+    direction = 'debit'
+  } else if (nextMoney?.money.marker === 'debit') {
+    direction = 'debit'
+  } else {
+    direction = 'debit'
+  }
+
+  const category = categoriseDescription(description)
+
+  return {
+    date: parseDate(dateMatch[1], dateMatch[2], statementEndDate),
+    description,
+    rawReference: buildRawReference(descriptionLines),
+    amountCents: amount.cents,
+    runningBalanceCents,
+    direction,
+    suggestedCategory: category.category,
+    confidenceScore: category.confidenceScore,
+    parseWarning: category.parseWarning,
+    rawExtractedText: {
+      dateLine: block.date,
+      lines: block.lines,
+    },
+  }
+}
+
+export async function extractTextFromPDF(file: File) {
+  const fileBuffer = await file.arrayBuffer()
+  const document = await pdfjsLib.getDocument({ data: fileBuffer }).promise
+  const pageTexts: string[] = []
+
+  for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+    const page = await document.getPage(pageNumber)
+    const content = await page.getTextContent()
+
+    const pageText = content.items
+      .map((item) => ('str' in item ? item.str : ''))
+      .join('\n')
+
+    pageTexts.push(pageText)
+  }
+
+  return pageTexts.join('\n')
 }
 
 export function parseFNBStatementText(text: string): FNBParseResult {
-  const lines = text.split('\n').filter(line => line.trim())
-  const statement: Partial<FNBStatement> = {}
-  const transactions: ParsedTransaction[] = []
-  
-  let inTransactions = false
-  let rowIndex = 0
-  let creditCount = 0
-  let debitCount = 0
-  let totalCredits = 0
-  let totalDebits = 0
-  let openingBalance = 0
-  let closingBalance = 0
-  
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim()
-    
-    if (line.includes('Statement Number')) {
-      const numMatch = line.match(/:\s*(\d+)/)
-      if (numMatch) statement.statementNumber = numMatch[1]
-    }
-    
-    if (line.includes('FNB Aspire Current Account')) {
-      const accountMatch = line.match(/:\s*(\d+)/)
-      if (accountMatch) statement.accountNumber = accountMatch[1]
-    }
-    
-    if (line.includes('Statement Period')) {
-      const periodMatch = line.match(/:\s*(.+)/)
-      if (periodMatch) {
-        const period = periodMatch[1].trim()
-        const parts = period.split(' to ')
-        if (parts.length === 2) {
-          statement.periodStart = parts[0].trim()
-          statement.periodEnd = parts[1].trim()
-        }
+  try {
+    const lines = text
+      .split(/\r?\n/)
+      .map(normaliseWhitespace)
+      .filter(Boolean)
+
+    if (lines.length === 0) {
+      return {
+        success: false,
+        error: 'No text could be extracted from this PDF.',
+        statement: null,
+        transactions: [],
+        balanceCheck: {
+          calculatedClosingCents: 0,
+          varianceCents: 0,
+          balanced: false,
+        },
       }
     }
-    
-    if (line.includes('Opening Balance')) {
-      const nextLine = lines[i + 1]?.trim()
-      if (nextLine) {
-        const parsed = parseAmount(nextLine)
-        if (parsed) openingBalance = parsed.cents
+
+    const period = extractStatementPeriod(text)
+    const statementEndDate = period.end ? new Date(`${period.end}T00:00:00Z`) : null
+
+    if (!statementEndDate || Number.isNaN(statementEndDate.getTime())) {
+      return {
+        success: false,
+        error: 'The statement period could not be detected from this FNB PDF.',
+        statement: null,
+        transactions: [],
+        balanceCheck: {
+          calculatedClosingCents: 0,
+          varianceCents: 0,
+          balanced: false,
+        },
       }
     }
-    
-    if (line.includes('Closing Balance')) {
-      const nextLine = lines[i + 1]?.trim()
-      if (nextLine) {
-        const parsed = parseAmount(nextLine)
-        if (parsed) closingBalance = parsed.cents
+
+    const openingBalanceCents = extractBalanceAfterLabel(lines, 'Opening Balance')
+    const closingBalanceCents = extractBalanceAfterLabel(lines, 'Closing Balance')
+
+    const blocks = splitTransactionBlocks(lines)
+    const transactions = blocks
+      .map((block) => parseTransactionBlock(block, statementEndDate))
+      .filter((transaction): transaction is ParsedTransaction => transaction !== null)
+
+    if (transactions.length === 0) {
+      return {
+        success: false,
+        error:
+          'The PDF text was extracted, but no FNB transaction blocks could be recognised. Ensure the statement includes the Transactions in RAND section.',
+        statement: null,
+        transactions: [],
+        balanceCheck: {
+          calculatedClosingCents: 0,
+          varianceCents: 0,
+          balanced: false,
+        },
       }
     }
-    
-    if (line.includes('Transactions in RAND')) {
-      inTransactions = true
-      continue
+
+    const totalCreditsCents = transactions
+      .filter((transaction) => transaction.direction === 'credit')
+      .reduce((sum, transaction) => sum + transaction.amountCents, 0)
+
+    const totalDebitsCents = transactions
+      .filter((transaction) => transaction.direction === 'debit')
+      .reduce((sum, transaction) => sum + transaction.amountCents, 0)
+
+    const calculatedClosingCents =
+      (openingBalanceCents ?? 0) + totalCreditsCents - totalDebitsCents
+
+    const varianceCents =
+      closingBalanceCents === null ? 0 : calculatedClosingCents - closingBalanceCents
+
+    const statement: FNBStatement = {
+      statementNumber: extractStatementNumber(text),
+      accountNumber: extractAccountNumber(text),
+      branchNumber: extractBranchNumber(text),
+      periodStart: period.start,
+      periodEnd: period.end,
+      openingBalanceCents,
+      closingBalanceCents,
+      totalCreditsCents,
+      totalDebitsCents,
+      creditTransactionCount: transactions.filter((transaction) => transaction.direction === 'credit').length,
+      debitTransactionCount: transactions.filter((transaction) => transaction.direction === 'debit').length,
     }
-    
-    if (line.includes('Turnover for Statement Period')) {
-      inTransactions = false
-      continue
+
+    return {
+      success: true,
+      error: null,
+      statement,
+      transactions,
+      balanceCheck: {
+        calculatedClosingCents,
+        varianceCents,
+        balanced: closingBalanceCents !== null && varianceCents === 0,
+      },
     }
-    
-    if (inTransactions && line.match(/^\d{2}\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/)) {
-      const parts = line.split(/\s+/)
-      if (parts.length >= 3) {
-        const dateStr = parts[0] + ' ' + parts[1]
-        const description = parts.slice(2, -2).join(' ')
-        const amountStr = parts[parts.length - 2]
-        const balanceStr = parts[parts.length - 1]
-        
-        const amount = parseAmount(amountStr)
-        const balance = parseAmount(balanceStr)
-        
-        if (amount) {
-          const category = categorizeTransaction(description || 'Bank charge')
-          transactions.push({
-            rowIndex: rowIndex++,
-            date: dateStr,
-            description: description || 'Bank charge',
-            amountCents: amount.cents,
-            runningBalanceCents: balance?.cents,
-            direction: amount.direction,
-            suggestedCategory: category.category,
-            confidenceScore: category.confidence,
-            rawExtractedText: { line, parts },
-            userCorrected: false,
-            includeInImport: true,
-          })
-          
-          if (amount.direction === 'credit') {
-            creditCount++
-            totalCredits += amount.cents
-          } else {
-            debitCount++
-            totalDebits += amount.cents
-          }
-        }
-      }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'An unexpected error occurred while parsing the FNB PDF.',
+      statement: null,
+      transactions: [],
+      balanceCheck: {
+        calculatedClosingCents: 0,
+        varianceCents: 0,
+        balanced: false,
+      },
     }
-  }
-  
-  const calculatedClosing = openingBalance + totalCredits - totalDebits
-  const variance = calculatedClosing - closingBalance
-  const balanced = Math.abs(variance) < 1
-  
-  return {
-    success: true,
-    statement: {
-      accountNumber: statement.accountNumber || '',
-      branchNumber: statement.branchNumber || '',
-      statementNumber: statement.statementNumber || '',
-      periodStart: statement.periodStart || '',
-      periodEnd: statement.periodEnd || '',
-      statementDate: statement.statementDate || '',
-      openingBalanceCents: openingBalance,
-      closingBalanceCents: closingBalance,
-      totalCreditsCents: totalCredits,
-      totalDebitsCents: totalDebits,
-      creditTransactionCount: creditCount,
-      debitTransactionCount: debitCount,
-    },
-    transactions,
-    balanceCheck: {
-      calculatedClosingCents: calculatedClosing,
-      varianceCents: variance,
-      balanced,
-    },
   }
 }

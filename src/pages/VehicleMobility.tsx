@@ -13,6 +13,8 @@ import {
   fuelCostPerKm,
   expectedFuelCost,
   projectedSettlementDate,
+  missedWeeks,
+  toDateInput,
 } from '../lib/vehicleCalc'
 
 export function VehicleMobility({
@@ -22,6 +24,7 @@ export function VehicleMobility({
   contributions,
   callOutSummary,
   onCheckIn,
+  onBackfillWeek,
 }: {
   vehicle: FinanceVehicle | null
   odometerEntries: VehicleOdometerEntry[]
@@ -29,6 +32,7 @@ export function VehicleMobility({
   contributions: VehicleContribution[]
   callOutSummary: CallOutSummary
   onCheckIn: () => void
+  onBackfillWeek: (week: { start: Date; end: Date }) => void
 }) {
   const latestEntry = odometerEntries[0]
   const latestEntryTrips = useMemo(
@@ -69,6 +73,8 @@ export function VehicleMobility({
   const fuelVariance =
     latestEntry != null && expectedFuel != null ? latestEntry.fuel_spent_cents - expectedFuel : null
 
+  const missed = useMemo(() => missedWeeks(odometerEntries, 8), [odometerEntries])
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
@@ -80,6 +86,37 @@ export function VehicleMobility({
           Sunday check-in
         </button>
       </header>
+
+      {missed.length > 0 && (
+        <SectionCard
+          eyebrow="Missed weeks"
+          title={`${missed.length} ${missed.length === 1 ? 'week is' : 'weeks are'} missing a Sunday check-in`}
+          status={<Pill label="Needs attention" tone="warn" />}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {missed.map((w) => (
+              <div
+                key={toDateInput(w.start)}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: 12,
+                  padding: '8px 0',
+                  borderTop: '1px solid var(--line)',
+                }}
+              >
+                <span style={{ fontSize: 13.5 }}>
+                  {toDateInput(w.start)} → {toDateInput(w.end)}
+                </span>
+                <button type="button" className="link-button" onClick={() => onBackfillWeek(w)}>
+                  Log this week
+                </button>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+      )}
 
       {vehicle.phase === 'settled' ? (
         <SettledState vehicle={vehicle} />

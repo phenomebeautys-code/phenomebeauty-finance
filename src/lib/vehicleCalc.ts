@@ -93,3 +93,30 @@ export function currentWeekRange(from: Date = new Date()): { start: Date; end: D
 export function toDateInput(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
+
+/**
+ * Lists the most recent `count` completed Monday-to-Sunday weeks (not including the
+ * current, still-open week), most recent first. Used to offer missed weeks for backfill.
+ */
+export function recentCompletedWeeks(count: number, from: Date = new Date()): { start: Date; end: Date }[] {
+  const { start: currentStart } = currentWeekRange(from)
+  const weeks: { start: Date; end: Date }[] = []
+  for (let i = 1; i <= count; i++) {
+    const end = new Date(currentStart)
+    end.setDate(end.getDate() - 1 - (i - 1) * 7)
+    const start = new Date(end)
+    start.setDate(start.getDate() - 6)
+    weeks.push({ start, end })
+  }
+  return weeks
+}
+
+/** Weeks from `recentCompletedWeeks` that don't already have an odometer entry logged. */
+export function missedWeeks(
+  entries: { week_start: string }[],
+  count = 8,
+  from: Date = new Date()
+): { start: Date; end: Date }[] {
+  const logged = new Set(entries.map((e) => e.week_start))
+  return recentCompletedWeeks(count, from).filter((w) => !logged.has(toDateInput(w.start)))
+}

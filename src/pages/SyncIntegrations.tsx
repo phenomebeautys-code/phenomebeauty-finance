@@ -10,16 +10,20 @@ const RUN_STATUS_TONE: Record<YocoSyncRun['status'], { tone: 'good' | 'warn' | '
   failed: { tone: 'warn', label: 'Failed' },
 }
 
-const SOURCES: { key: string; label: string; connected: boolean }[] = [
-  { key: 'yoco', label: 'Yoco', connected: true },
-  { key: 'nextslot', label: 'NextSlot', connected: true },
-  { key: 'shop_admin', label: 'Shop Admin', connected: true },
-  { key: 'fnb', label: 'FNB', connected: false },
-  { key: 'google_drive', label: 'Google Drive', connected: false },
-]
-
 export function SyncIntegrations({ syncRuns }: { syncRuns: YocoSyncRun[] }) {
   const lastYocoRun = syncRuns[0]
+  const yocoHealthy = Boolean(
+    lastYocoRun && lastYocoRun.status === 'completed' &&
+      Date.now() - new Date(lastYocoRun.completed_at ?? lastYocoRun.started_at).getTime() < 1000 * 60 * 60 * 48
+  )
+
+  const SOURCES: { key: string; label: string; connected: boolean }[] = [
+    { key: 'yoco', label: 'Yoco', connected: yocoHealthy },
+    { key: 'nextslot', label: 'NextSlot', connected: true },
+    { key: 'shop_admin', label: 'Shop Admin', connected: true },
+    { key: 'fnb', label: 'FNB', connected: false },
+    { key: 'google_drive', label: 'Google Drive', connected: false },
+  ]
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>

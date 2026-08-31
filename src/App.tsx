@@ -31,6 +31,7 @@ const TAB_LABELS: Record<Tab, string> = {
 function AuthenticatedApp({ user }: { user: User }) {
   const [tab, setTab] = useState<Tab>('dashboard')
   const [checkingIn, setCheckingIn] = useState(false)
+  const [backfillWeek, setBackfillWeek] = useState<{ start: Date; end: Date } | null>(null)
   const { sales, loading, usingDemoData, refresh } = useSales()
   const finance = useFinanceData()
   const vehicleData = useVehicleData()
@@ -104,8 +105,6 @@ function AuthenticatedApp({ user }: { user: User }) {
             {tab === 'dashboard' && (
               <Overview
                 sales={sales}
-                expectedCents={expected.cents}
-                expectedCount={expected.count}
                 reconciliationExceptions={reconciliationExceptions}
                 syncStale={syncStale}
                 vehicle={vehicleData.vehicle}
@@ -113,7 +112,7 @@ function AuthenticatedApp({ user }: { user: User }) {
               />
             )}
             {tab === 'new-sale' && <NewSale onSaved={refresh} />}
-            {tab === 'ledger' && <SalesLedgerPage sales={sales} />}
+            {tab === 'ledger' && <SalesLedgerPage sales={sales} onChanged={refresh} />}
             {tab === 'reconciliation' && (
               <Reconciliation
                 matches={finance.reconciliationMatches}
@@ -129,15 +128,20 @@ function AuthenticatedApp({ user }: { user: User }) {
             )}
             {tab === 'sync' && <SyncIntegrations syncRuns={finance.syncRuns} />}
             {tab === 'vehicle' &&
-              (checkingIn && vehicleData.vehicle ? (
+              ((checkingIn || backfillWeek) && vehicleData.vehicle ? (
                 <OdometerCheckIn
                   vehicle={vehicleData.vehicle}
-                  lastEntry={vehicleData.odometerEntries[0]}
+                  odometerEntries={vehicleData.odometerEntries}
+                  targetWeek={backfillWeek ?? undefined}
                   onSaved={() => {
                     setCheckingIn(false)
+                    setBackfillWeek(null)
                     vehicleData.refresh()
                   }}
-                  onCancel={() => setCheckingIn(false)}
+                  onCancel={() => {
+                    setCheckingIn(false)
+                    setBackfillWeek(null)
+                  }}
                 />
               ) : (
                 <VehicleMobility
@@ -147,6 +151,7 @@ function AuthenticatedApp({ user }: { user: User }) {
                   contributions={vehicleData.contributions}
                   callOutSummary={vehicleData.callOutSummary}
                   onCheckIn={() => setCheckingIn(true)}
+                  onBackfillWeek={(w) => setBackfillWeek(w)}
                 />
               ))}
           </>

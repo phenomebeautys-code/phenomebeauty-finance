@@ -18,16 +18,24 @@ function newTrip(): DraftTrip {
 
 export function OdometerCheckIn({
   vehicle,
-  lastEntry,
+  odometerEntries,
+  targetWeek,
   onSaved,
   onCancel,
 }: {
   vehicle: FinanceVehicle
-  lastEntry: VehicleOdometerEntry | undefined
+  /** All known odometer entries for this vehicle, most recent first. */
+  odometerEntries: VehicleOdometerEntry[]
+  /** The week being checked in for. Defaults to the current (in-progress) week — pass a
+   *  past week's { start, end } to back-fill a missed Sunday check-in. */
+  targetWeek?: { start: Date; end: Date }
   onSaved: () => void
   onCancel: () => void
 }) {
-  const { start, end } = currentWeekRange()
+  const { start, end } = targetWeek ?? currentWeekRange()
+  const weekStartInput = toDateInput(start)
+  const isBackfill = Boolean(targetWeek)
+
   const [closingOdometer, setClosingOdometer] = useState('')
   const [fuelSpent, setFuelSpent] = useState('')
   const [notes, setNotes] = useState('')
@@ -35,7 +43,14 @@ export function OdometerCheckIn({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const opening = lastEntry?.closing_odometer_km ?? null
+  // The correct "opening" reading is the closing reading of whichever logged entry
+  // ends right before this week starts — NOT just the globally most recent entry,
+  // which matters when back-filling an older missed week out of order.
+  const existingEntry = odometerEntries.find((e) => e.week_start === weekStartInput)
+  const priorEntry = odometerEntries
+    .filter((e) => e.week_end < weekStartInput)
+    .sort((a, b) => (a.week_end < b.week_end ? 1 : -1))[0]
+  const opening = existingEntry?.opening_odometer_km ?? priorEntry?.closing_odometer_km ?? null
 
   function updateTrip(id: string, patch: Partial<DraftTrip>) {
     setTrips((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)))
@@ -59,6 +74,11 @@ export function OdometerCheckIn({
       return
     }
 
+    if (existingEntry) {
+      setError('A check-in for this week already exists.')
+      return
+    }
+
     const closing = parseInt(closingOdometer, 10)
     if (Number.isNaN(closing) || closing < opening) {
       setError(`Closing odometer must be a number of at least ${opening} km.`)
@@ -71,7 +91,7 @@ export function OdometerCheckIn({
       .from('finance_vehicle_odometer_entries')
       .insert({
         vehicle_id: vehicle.id,
-        week_start: toDateInput(start),
+        week_start: weekStartInput,
         week_end: toDateInput(end),
         opening_odometer_km: opening,
         closing_odometer_km: closing,
@@ -112,11 +132,19 @@ export function OdometerCheckIn({
   return (
     <form onSubmit={handleSubmit}>
       <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 20, margin: '0 0 4px' }}>
-        Sunday vehicle check-in
+        {isBackfill ? 'Back-fill missed check-in' : 'Sunday vehicle check-in'}
       </h2>
       <p style={{ margin: '0 0 24px', color: 'var(--ink-soft)', fontSize: 14, maxWidth: 560 }}>
         {toDateInput(start)} → {toDateInput(end)}
+        {isBackfill && ' · logging a previous week, not the current one'}
       </p>
+
+      {existingEntry && (
+        <p style={{ color: 'var(--warn)', fontSize: 13, marginBottom: 16 }}>
+          A check-in for this week has already been logged. Choose a different week, or edit the
+          existing entry from the vehicle log instead of creating a duplicate.
+        </p>
+      )}
 
       <Field label="Your last recorded odometer">
         <input type="text" value={opening != null ? `${opening} km` : 'Not set'} disabled />

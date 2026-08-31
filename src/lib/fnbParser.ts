@@ -1,8 +1,8 @@
 import * as pdfjsLib from 'pdfjs-dist'
-import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import type { FNBParseResult, FNBStatement, ParsedTransaction } from './types-fnb'
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`
 
 type MoneyValue = {
   cents: number
@@ -459,7 +459,11 @@ function parseTransactionBlock(
 
 export async function extractTextFromPDF(file: File) {
   const fileBuffer = await file.arrayBuffer()
-  const document = await pdfjsLib.getDocument({ data: fileBuffer }).promise
+
+  const document = await pdfjsLib.getDocument({
+    data: fileBuffer,
+  }).promise
+
   const pageTexts: string[] = []
 
   for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {

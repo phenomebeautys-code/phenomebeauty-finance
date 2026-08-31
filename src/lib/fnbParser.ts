@@ -30,8 +30,11 @@ const MONTHS: Record<string, number> = {
 }
 
 const TRANSACTION_DATE_PATTERN = /^(\d{2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)$/i
+
 const MONEY_PATTERN = /^(\d{1,3}(?:,\d{3})*|\d+)\.(\d{2})\s*(Cr|Dr)?$/i
+
 const CARD_REFERENCE_PATTERN = /^\d{4,}\*+\d+(?:\s+\d{2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec))?$/i
+
 const PAGE_OR_COLUMN_HEADER_PATTERN =
   /^(Date|Description|Amount|Balance|Accrued|Bank|Charges|Transactions in RAND \(ZAR\)|Transactions in RAND \(ZAR\)\s*:.*)$/i
 
@@ -56,24 +59,10 @@ function parseMoney(value: string): MoneyValue | null {
   }
 }
 
-function parseDate(day: string, monthName: string, statementEndDate: Date) {
-  const month = MONTHS[monthName.toLowerCase()]
-
-  if (month === undefined) {
-    throw new Error(`Unsupported FNB transaction month: ${monthName}`)
-  }
-
-  const statementYear = statementEndDate.getFullYear()
-  const statementEndMonth = statementEndDate.getMonth()
-  const transactionYear = month > statementEndMonth ? statementYear - 1 : statementYear
-
-  return new Date(Date.UTC(transactionYear, month, Number.parseInt(day, 10)))
-    .toISOString()
-    .slice(0, 10)
-}
-
 function parseStatementDate(value: string) {
-  const match = normaliseWhitespace(value).match(/^(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\s+(\d{4})$/i)
+  const match = normaliseWhitespace(value).match(
+    /^(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\s+(\d{4})$/i
+  )
 
   if (!match) {
     return null
@@ -85,7 +74,30 @@ function parseStatementDate(value: string) {
     return null
   }
 
-  return new Date(Date.UTC(Number.parseInt(match[3], 10), month, Number.parseInt(match[1], 10)))
+  const day = Number.parseInt(match[1], 10)
+  const year = Number.parseInt(match[3], 10)
+
+  return new Date(Date.UTC(year, month, day))
+}
+
+function toIsoDate(value: Date | null) {
+  return value ? value.toISOString().slice(0, 10) : ''
+}
+
+function parseTransactionDate(day: string, monthName: string, statementEndDate: Date) {
+  const month = MONTHS[monthName.toLowerCase()]
+
+  if (month === undefined) {
+    throw new Error(`Unsupported FNB transaction month: ${monthName}`)
+  }
+
+  const statementYear = statementEndDate.getUTCFullYear()
+  const statementEndMonth = statementEndDate.getUTCMonth()
+  const transactionYear = month > statementEndMonth ? statementYear - 1 : statementYear
+
+  return new Date(Date.UTC(transactionYear, month, Number.parseInt(day, 10)))
+    .toISOString()
+    .slice(0, 10)
 }
 
 function extractStatementPeriod(text: string) {
@@ -122,7 +134,9 @@ function findNextMoneyLine(lines: string[], startIndex: number) {
 }
 
 function extractBalanceAfterLabel(lines: string[], label: string) {
-  const labelIndex = lines.findIndex((line) => normaliseWhitespace(line).toLowerCase() === label.toLowerCase())
+  const labelIndex = lines.findIndex(
+    (line) => normaliseWhitespace(line).toLowerCase() === label.toLowerCase()
+  )
 
   if (labelIndex === -1) {
     return null
@@ -142,19 +156,19 @@ function extractAccountNumber(text: string) {
 
   const fallbackMatch = text.match(/Account Number\s*[\r\n]+\s*\d+\s*[\r\n]+\s*(\d{8,})/i)
 
-  return fallbackMatch?.[1] ?? null
+  return fallbackMatch?.[1] ?? ''
 }
 
 function extractBranchNumber(text: string) {
   const branchMatch = text.match(/Branch Number\s*[\r\n]+\s*\S+\s*[\r\n]+\s*(\d{3,})/i)
 
-  return branchMatch?.[1] ?? null
+  return branchMatch?.[1] ?? ''
 }
 
 function extractStatementNumber(text: string) {
   const statementMatch = text.match(/Tax Invoice\/Statement Number\s*:\s*(\d+)/i)
 
-  return statementMatch?.[1] ?? null
+  return statementMatch?.[1] ?? ''
 }
 
 function isTransactionDateLine(line: string) {
@@ -237,10 +251,6 @@ function getDescriptionLines(lines: string[], amountIndex: number) {
         return false
       }
 
-      if (CARD_REFERENCE_PATTERN.test(line)) {
-        return true
-      }
-
       return !parseMoney(line)
     })
     .map(normaliseWhitespace)
@@ -250,21 +260,17 @@ function getDescriptionLines(lines: string[], amountIndex: number) {
 function buildRawReference(descriptionLines: string[]) {
   const referenceLines = descriptionLines.filter((line) => CARD_REFERENCE_PATTERN.test(line))
 
-  return referenceLines.length > 0 ? referenceLines.join(' ') : null
+  return referenceLines.length > 0 ? referenceLines.join(' ') : ''
 }
 
-function categoriseDescription(description: string): {
-  category: string
-  confidenceScore: number
-  parseWarning: string | null
-} {
+function categoriseDescription(description: string) {
   const lower = description.toLowerCase()
 
   if (lower.includes('magtape credit yoco')) {
     return {
       category: 'Yoco payout',
       confidenceScore: 0.98,
-      parseWarning: null,
+      parseWarning: '',
     }
   }
 
@@ -272,15 +278,20 @@ function categoriseDescription(description: string): {
     return {
       category: 'Client payment',
       confidenceScore: 0.9,
-      parseWarning: null,
+      parseWarning: '',
     }
   }
 
-  if (lower.includes('fuel purchase') || lower.includes('engen') || lower.includes('bp ') || lower.includes('total ')) {
+  if (
+    lower.includes('fuel purchase') ||
+    lower.includes('engen') ||
+    lower.includes('bp ') ||
+    lower.includes('total ')
+  ) {
     return {
       category: 'Fuel',
       confidenceScore: 0.95,
-      parseWarning: null,
+      parseWarning: '',
     }
   }
 
@@ -288,50 +299,79 @@ function categoriseDescription(description: string): {
     return {
       category: 'Utilities',
       confidenceScore: 0.95,
-      parseWarning: null,
+      parseWarning: '',
     }
   }
 
-  if (lower.includes('debicheck') || lower.includes('rtc pmt to car') || lower.includes('absa vf')) {
+  if (
+    lower.includes('debicheck') ||
+    lower.includes('rtc pmt to car') ||
+    lower.includes('absa vf')
+  ) {
     return {
       category: 'Vehicle finance',
       confidenceScore: 0.9,
-      parseWarning: null,
+      parseWarning: '',
     }
   }
 
-  if (lower.includes('keiko') || lower.includes('logica beauty') || lower.includes('bright packaging') || lower.includes('shop b47') || lower.includes('shop a39')) {
+  if (
+    lower.includes('keiko') ||
+    lower.includes('logica beauty') ||
+    lower.includes('bright packaging') ||
+    lower.includes('shop b47') ||
+    lower.includes('shop a39')
+  ) {
     return {
       category: 'Stock and supplies',
       confidenceScore: 0.85,
-      parseWarning: null,
+      parseWarning: '',
     }
   }
 
-  if (lower.includes('fnb app transfer from') || lower.includes('transfer to pocket') || lower.includes('send money app')) {
+  if (
+    lower.includes('fnb app transfer from') ||
+    lower.includes('transfer to pocket') ||
+    lower.includes('send money app')
+  ) {
     return {
       category: 'Transfer',
       confidenceScore: 0.8,
-      parseWarning: null,
+      parseWarning: '',
     }
   }
 
-  if (lower.includes('checkers') || lower.includes('pnp') || lower.includes('pick n pay') || lower.includes('spar') || lower.includes('woolworths') || lower.includes('kfc') || lower.includes('pizza') || lower.includes('tikka')) {
+  if (
+    lower.includes('checkers') ||
+    lower.includes('pnp') ||
+    lower.includes('pick n pay') ||
+    lower.includes('spar') ||
+    lower.includes('woolworths') ||
+    lower.includes('kfc') ||
+    lower.includes('pizza') ||
+    lower.includes('tikka')
+  ) {
     return {
       category: 'Needs review',
       confidenceScore: 0.55,
-      parseWarning: 'This merchant may be a business or personal expense. Review its classification.',
+      parseWarning:
+        'This merchant may be a business or personal expense. Review its classification.',
     }
   }
 
   return {
     category: 'Needs review',
     confidenceScore: 0.35,
-    parseWarning: 'No automatic category match was found. Review this transaction.',
+    parseWarning:
+      'No automatic category match was found. Review this transaction.',
   }
 }
 
-function parseTransactionBlock(block: TransactionBlock, statementEndDate: Date): ParsedTransaction | null {
+function parseTransactionBlock(
+  block: TransactionBlock,
+  statementEndDate: Date,
+  rowIndex: number
+): ParsedTransaction | null {
   const dateMatch = normaliseWhitespace(block.date).match(TRANSACTION_DATE_PATTERN)
 
   if (!dateMatch) {
@@ -354,7 +394,7 @@ function parseTransactionBlock(block: TransactionBlock, statementEndDate: Date):
   const amount = amountEntry.money
   const remainingLines = block.lines.slice(amountEntry.index + 1)
   const nextMoney = findNextMoneyLine(remainingLines, 0)
-  const runningBalanceCents = nextMoney?.money.cents ?? null
+  const runningBalanceCents = nextMoney?.money.cents ?? 0
 
   let direction: 'credit' | 'debit'
 
@@ -372,22 +412,25 @@ function parseTransactionBlock(block: TransactionBlock, statementEndDate: Date):
     direction = 'debit'
   }
 
-  const category = categoriseDescription(description)
+  const categorisation = categoriseDescription(description)
 
   return {
-    date: parseDate(dateMatch[1], dateMatch[2], statementEndDate),
+    rowIndex,
+    date: parseTransactionDate(dateMatch[1], dateMatch[2], statementEndDate),
     description,
     rawReference: buildRawReference(descriptionLines),
     amountCents: amount.cents,
     runningBalanceCents,
     direction,
-    suggestedCategory: category.category,
-    confidenceScore: category.confidenceScore,
-    parseWarning: category.parseWarning,
+    suggestedCategory: categorisation.category,
+    confidenceScore: categorisation.confidenceScore,
+    parseWarning: categorisation.parseWarning,
     rawExtractedText: {
       dateLine: block.date,
       lines: block.lines,
     },
+    userCorrected: false,
+    includeInImport: true,
   }
 }
 
@@ -432,7 +475,7 @@ export function parseFNBStatementText(text: string): FNBParseResult {
     }
 
     const period = extractStatementPeriod(text)
-    const statementEndDate = period.end ? new Date(`${period.end}T00:00:00Z`) : null
+    const statementEndDate = period.end
 
     if (!statementEndDate || Number.isNaN(statementEndDate.getTime())) {
       return {
@@ -452,9 +495,14 @@ export function parseFNBStatementText(text: string): FNBParseResult {
     const closingBalanceCents = extractBalanceAfterLabel(lines, 'Closing Balance')
 
     const blocks = splitTransactionBlocks(lines)
+
     const transactions = blocks
-      .map((block) => parseTransactionBlock(block, statementEndDate))
+      .map((block, rowIndex) => parseTransactionBlock(block, statementEndDate, rowIndex))
       .filter((transaction): transaction is ParsedTransaction => transaction !== null)
+      .map((transaction, rowIndex) => ({
+        ...transaction,
+        rowIndex,
+      }))
 
     if (transactions.length === 0) {
       return {
@@ -483,37 +531,48 @@ export function parseFNBStatementText(text: string): FNBParseResult {
       (openingBalanceCents ?? 0) + totalCreditsCents - totalDebitsCents
 
     const varianceCents =
-      closingBalanceCents === null ? 0 : calculatedClosingCents - closingBalanceCents
+      closingBalanceCents === null
+        ? 0
+        : calculatedClosingCents - closingBalanceCents
 
     const statement: FNBStatement = {
       statementNumber: extractStatementNumber(text),
       accountNumber: extractAccountNumber(text),
       branchNumber: extractBranchNumber(text),
-      periodStart: period.start,
-      periodEnd: period.end,
-      openingBalanceCents,
-      closingBalanceCents,
+      periodStart: toIsoDate(period.start),
+      periodEnd: toIsoDate(period.end),
+      openingBalanceCents: openingBalanceCents ?? 0,
+      closingBalanceCents: closingBalanceCents ?? 0,
       totalCreditsCents,
       totalDebitsCents,
-      creditTransactionCount: transactions.filter((transaction) => transaction.direction === 'credit').length,
-      debitTransactionCount: transactions.filter((transaction) => transaction.direction === 'debit').length,
+      creditTransactionCount: transactions.filter(
+        (transaction) => transaction.direction === 'credit'
+      ).length,
+      debitTransactionCount: transactions.filter(
+        (transaction) => transaction.direction === 'debit'
+      ).length,
     }
 
     return {
       success: true,
-      error: null,
+      error: '',
       statement,
       transactions,
       balanceCheck: {
         calculatedClosingCents,
         varianceCents,
-        balanced: closingBalanceCents !== null && varianceCents === 0,
+        balanced:
+          closingBalanceCents !== null &&
+          varianceCents === 0,
       },
     }
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'An unexpected error occurred while parsing the FNB PDF.',
+      error:
+        error instanceof Error
+          ? error.message
+          : 'An unexpected error occurred while parsing the FNB PDF.',
       statement: null,
       transactions: [],
       balanceCheck: {

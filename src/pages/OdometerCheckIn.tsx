@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { FinanceVehicle, VehicleOdometerEntry, TripCategory } from '../lib/types'
 import { TRIP_CATEGORY_LABELS } from '../lib/types'
 import { randsToCents } from '../lib/money'
@@ -52,6 +52,14 @@ export function OdometerCheckIn({
     .sort((a, b) => (a.week_end < b.week_end ? 1 : -1))[0]
   const opening = existingEntry?.opening_odometer_km ?? priorEntry?.closing_odometer_km ?? null
 
+  // Opening reading is pre-filled from the prior week's close, but stays editable —
+  // e.g. no prior entry exists yet, a correction is needed, or this is the very first check-in.
+  const [openingInput, setOpeningInput] = useState<string>(opening != null ? String(opening) : '')
+  useEffect(() => {
+    setOpeningInput(opening != null ? String(opening) : '')
+  }, [opening])
+  const effectiveOpening = openingInput.trim() === '' ? null : parseInt(openingInput, 10)
+
   function updateTrip(id: string, patch: Partial<DraftTrip>) {
     setTrips((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)))
   }
@@ -69,8 +77,8 @@ export function OdometerCheckIn({
       return
     }
 
-    if (opening == null) {
-      setError('No previous odometer reading found. Set an opening reading for this vehicle first.')
+    if (effectiveOpening == null || Number.isNaN(effectiveOpening)) {
+      setError('Enter the opening odometer reading for this week before saving.')
       return
     }
 
@@ -80,8 +88,8 @@ export function OdometerCheckIn({
     }
 
     const closing = parseInt(closingOdometer, 10)
-    if (Number.isNaN(closing) || closing < opening) {
-      setError(`Closing odometer must be a number of at least ${opening} km.`)
+    if (Number.isNaN(closing) || closing < effectiveOpening) {
+      setError(`Closing odometer must be a number of at least ${effectiveOpening} km.`)
       return
     }
 
@@ -93,7 +101,7 @@ export function OdometerCheckIn({
         vehicle_id: vehicle.id,
         week_start: weekStartInput,
         week_end: toDateInput(end),
-        opening_odometer_km: opening,
+        opening_odometer_km: effectiveOpening,
         closing_odometer_km: closing,
         fuel_spent_cents: randsToCents(fuelSpent || '0'),
         notes: notes.trim() || null,
@@ -147,14 +155,25 @@ export function OdometerCheckIn({
       )}
 
       <Field label="Your last recorded odometer">
-        <input type="text" value={opening != null ? `${opening} km` : 'Not set'} disabled />
+        <input
+          type="text"
+          inputMode="numeric"
+          value={openingInput}
+          onChange={(e) => setOpeningInput(e.target.value)}
+          placeholder="km"
+        />
+        {priorEntry == null && (
+          <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 6 }}>
+            No prior check-in found for this vehicle — enter the current odometer reading to start.
+          </p>
+        )}
       </Field>
 
       <Field label="Enter closing odometer (km)">
         <input
           type="text"
           inputMode="numeric"
-          placeholder={opening != null ? String(opening) : '0'}
+          placeholder={effectiveOpening != null ? String(effectiveOpening) : '0'}
           value={closingOdometer}
           onChange={(e) => setClosingOdometer(e.target.value)}
           required

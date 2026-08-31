@@ -36,14 +36,6 @@ function AuthenticatedApp({ user }: { user: User }) {
   const finance = useFinanceData()
   const vehicleData = useVehicleData()
 
-  const expected = useMemo(() => {
-    const unpaid = finance.yocoPayouts.filter((p) => p.status !== 'paid')
-    return {
-      cents: unpaid.reduce((sum, p) => sum + p.net_amount_cents, 0),
-      count: unpaid.length,
-    }
-  }, [finance.yocoPayouts])
-
   const reconciliationExceptions = useMemo(
     () => finance.reconciliationMatches.filter((m) => m.status === 'suggested' || m.status === 'broken').length,
     [finance.reconciliationMatches]

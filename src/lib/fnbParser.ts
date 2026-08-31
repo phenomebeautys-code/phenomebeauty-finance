@@ -2,7 +2,7 @@ import * as pdfjsLib from 'pdfjs-dist'
 import type { FNBParseResult, FNBStatement, ParsedTransaction } from './types-fnb'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc =
-  `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`
+  `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
 
 type MoneyValue = {
   cents: number

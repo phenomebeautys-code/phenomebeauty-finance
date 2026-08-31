@@ -1,11 +1,10 @@
 import { useState } from 'react'
-import { useSupabaseClient } from '../lib/supabase'
+import { supabase } from '../lib/supabase'
 import { extractTextFromPDF, parseFNBStatementText } from '../lib/fnbParser'
 import { uploadFNBPDF, saveParsedRows, confirmFNBImport, finalizeFNBImport } from '../lib/fnb'
 import type { FNBParseResult, ParsedTransaction } from '../lib/types-fnb'
 
 export default function FNBImport() {
-  const supabase = useSupabaseClient()
   const [step, setStep] = useState<'upload' | 'parsing' | 'preview' | 'importing' | 'complete'>('upload')
   const [file, setFile] = useState<File | null>(null)
   const [importId, setImportId] = useState<string>('')
@@ -52,7 +51,7 @@ export default function FNBImport() {
     setError('')
     try {
       await confirmFNBImport(importId, parseResult)
-      const { imported, skipped } = await finalizeFNBImport(importId)
+      await finalizeFNBImport(importId)
       setStep('complete')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Import failed')

@@ -29,11 +29,14 @@ const MONTHS: Record<string, number> = {
   dec: 11,
 }
 
-const TRANSACTION_DATE_PATTERN = /^(\d{2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)$/i
+const TRANSACTION_DATE_PATTERN =
+  /^(\d{2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)$/i
 
-const MONEY_PATTERN = /^(\d{1,3}(?:,\d{3})*|\d+)\.(\d{2})\s*(Cr|Dr)?$/i
+const MONEY_PATTERN =
+  /^(\d{1,3}(?:,\d{3})*|\d+)\.(\d{2})\s*(Cr|Dr)?$/i
 
-const CARD_REFERENCE_PATTERN = /^\d{4,}\*+\d+(?:\s+\d{2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec))?$/i
+const CARD_REFERENCE_PATTERN =
+  /^\d{4,}\*+\d+(?:\s+\d{2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec))?$/i
 
 const PAGE_OR_COLUMN_HEADER_PATTERN =
   /^(Date|Description|Amount|Balance|Accrued|Bank|Charges|Transactions in RAND \(ZAR\)|Transactions in RAND \(ZAR\)\s*:.*)$/i
@@ -118,6 +121,18 @@ function extractStatementPeriod(text: string) {
   }
 }
 
+function extractStatementDate(text: string) {
+  const statementDateMatch = text.match(
+    /Statement Date\s*:\s*(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\s+\d{4})/i
+  )
+
+  if (!statementDateMatch) {
+    return ''
+  }
+
+  return toIsoDate(parseStatementDate(statementDateMatch[1]))
+}
+
 function findNextMoneyLine(lines: string[], startIndex: number) {
   for (let index = startIndex; index < lines.length; index += 1) {
     const money = parseMoney(lines[index])
@@ -139,12 +154,12 @@ function extractBalanceAfterLabel(lines: string[], label: string) {
   )
 
   if (labelIndex === -1) {
-    return null
+    return 0
   }
 
   const match = findNextMoneyLine(lines, labelIndex + 1)
 
-  return match?.money.cents ?? null
+  return match?.money.cents ?? 0
 }
 
 function extractAccountNumber(text: string) {
@@ -154,13 +169,17 @@ function extractAccountNumber(text: string) {
     return accountMatch[1]
   }
 
-  const fallbackMatch = text.match(/Account Number\s*[\r\n]+\s*\d+\s*[\r\n]+\s*(\d{8,})/i)
+  const fallbackMatch = text.match(
+    /Account Number\s*[\r\n]+\s*\d+\s*[\r\n]+\s*(\d{8,})/i
+  )
 
   return fallbackMatch?.[1] ?? ''
 }
 
 function extractBranchNumber(text: string) {
-  const branchMatch = text.match(/Branch Number\s*[\r\n]+\s*\S+\s*[\r\n]+\s*(\d{3,})/i)
+  const branchMatch = text.match(
+    /Branch Number\s*[\r\n]+\s*\S+\s*[\r\n]+\s*(\d{3,})/i
+  )
 
   return branchMatch?.[1] ?? ''
 }
@@ -258,7 +277,9 @@ function getDescriptionLines(lines: string[], amountIndex: number) {
 }
 
 function buildRawReference(descriptionLines: string[]) {
-  const referenceLines = descriptionLines.filter((line) => CARD_REFERENCE_PATTERN.test(line))
+  const referenceLines = descriptionLines.filter((line) =>
+    CARD_REFERENCE_PATTERN.test(line)
+  )
 
   return referenceLines.length > 0 ? referenceLines.join(' ') : ''
 }
@@ -372,7 +393,9 @@ function parseTransactionBlock(
   statementEndDate: Date,
   rowIndex: number
 ): ParsedTransaction | null {
-  const dateMatch = normaliseWhitespace(block.date).match(TRANSACTION_DATE_PATTERN)
+  const dateMatch = normaliseWhitespace(block.date).match(
+    TRANSACTION_DATE_PATTERN
+  )
 
   if (!dateMatch) {
     return null
@@ -493,11 +516,12 @@ export function parseFNBStatementText(text: string): FNBParseResult {
 
     const openingBalanceCents = extractBalanceAfterLabel(lines, 'Opening Balance')
     const closingBalanceCents = extractBalanceAfterLabel(lines, 'Closing Balance')
-
     const blocks = splitTransactionBlocks(lines)
 
     const transactions = blocks
-      .map((block, rowIndex) => parseTransactionBlock(block, statementEndDate, rowIndex))
+      .map((block, rowIndex) =>
+        parseTransactionBlock(block, statementEndDate, rowIndex)
+      )
       .filter((transaction): transaction is ParsedTransaction => transaction !== null)
       .map((transaction, rowIndex) => ({
         ...transaction,
@@ -528,21 +552,19 @@ export function parseFNBStatementText(text: string): FNBParseResult {
       .reduce((sum, transaction) => sum + transaction.amountCents, 0)
 
     const calculatedClosingCents =
-      (openingBalanceCents ?? 0) + totalCreditsCents - totalDebitsCents
+      openingBalanceCents + totalCreditsCents - totalDebitsCents
 
-    const varianceCents =
-      closingBalanceCents === null
-        ? 0
-        : calculatedClosingCents - closingBalanceCents
+    const varianceCents = calculatedClosingCents - closingBalanceCents
 
     const statement: FNBStatement = {
       statementNumber: extractStatementNumber(text),
+      statementDate: extractStatementDate(text),
       accountNumber: extractAccountNumber(text),
       branchNumber: extractBranchNumber(text),
       periodStart: toIsoDate(period.start),
       periodEnd: toIsoDate(period.end),
-      openingBalanceCents: openingBalanceCents ?? 0,
-      closingBalanceCents: closingBalanceCents ?? 0,
+      openingBalanceCents,
+      closingBalanceCents,
       totalCreditsCents,
       totalDebitsCents,
       creditTransactionCount: transactions.filter(
@@ -561,9 +583,7 @@ export function parseFNBStatementText(text: string): FNBParseResult {
       balanceCheck: {
         calculatedClosingCents,
         varianceCents,
-        balanced:
-          closingBalanceCents !== null &&
-          varianceCents === 0,
+        balanced: varianceCents === 0,
       },
     }
   } catch (error) {

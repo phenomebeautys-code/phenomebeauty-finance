@@ -72,6 +72,7 @@ Deno.serve(async (req) => {
         raw_reference: row.raw_reference,
         signed_amount_cents: signedAmountCents,
         running_balance_cents: row.running_balance_cents,
+        direction: row.direction,
         transaction_fingerprint: fingerprint,
         category: row.suggested_category,
         business_status: 'unreviewed',
@@ -95,8 +96,27 @@ Deno.serve(async (req) => {
     if (updateError) {
       return Response.json({ success: false, error: 'Failed to update import record.' }, { status: 500, headers: corsHeaders })
     }
-    
-    return Response.json({ success: true, imported, skipped }, { headers: corsHeaders })
+
+    // Kick off Yoco-payout and PayShap suggested-match generation for the
+    // rows we just imported. This is best-effort: a matching failure should
+    // not block the finalize call from succeeding, since the bank rows are
+    // already safely imported and matches can be regenerated later.
+    let matchSummary: Record<string, unknown> | null = null
+    try {
+      const matchResponse = await fetch(`${supabaseUrl}/functions/v1/match-bank-transactions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${serviceRoleKey}`,
+        },
+        body: JSON.stringify({ bankImportId: importId }),
+      })
+      matchSummary = await matchResponse.json().catch(() => null)
+    } catch (matchErr) {
+      matchSummary = { success: false, error: matchErr instanceof Error ? matchErr.message : 'Matching call failed.' }
+    }
+
+    return Response.json({ success: true, imported, skipped, matching: matchSummary }, { headers: corsHeaders })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Finalization failed.'
     return Response.json({ success: false, error: message }, { status: 500, headers: corsHeaders })

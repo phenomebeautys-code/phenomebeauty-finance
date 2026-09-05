@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { extractTextFromPDF, parseFNBStatementText } from '../lib/fnbParser'
+import { parseFNBStatementFromFile } from '../lib/fnbParser'
 import { uploadFNBPDF, saveParsedRows, confirmFNBImport, finalizeFNBImport } from '../lib/fnb'
 import type { FNBParseResult, ParsedTransaction } from '../lib/types-fnb'
 
@@ -30,8 +30,7 @@ export default function FNBImport() {
       const { importId: newImportId } = await uploadFNBPDF(file)
       setImportId(newImportId)
       
-      const text = await extractTextFromPDF(file)
-      const result = parseFNBStatementText(text)
+      const result = await parseFNBStatementFromFile(file)
       
       if (!result.success) throw new Error(result.error || 'Parsing failed')
       setParseResult(result)

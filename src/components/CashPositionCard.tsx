@@ -4,19 +4,25 @@ import { formatRands } from '../lib/money'
 
 export function CashPositionCard({
   fnbCents,
+  fnbAsOfDate,
   yocoSavingsCents,
   expectedPayoutCents,
   protectedCents,
+  committedCents,
   safeToUseCents,
 }: {
-  /** FNB operating balance from latest cash snapshot. */
+  /** FNB operating balance -- real closing balance from the latest imported statement when available, else a manual snapshot. */
   fnbCents: number
+  /** Statement end date the fnbCents figure is as-of, when sourced from a real import (FNB only updates monthly). */
+  fnbAsOfDate?: string | null
   /** Yoco Savings balance from latest cash snapshot. */
   yocoSavingsCents: number
   /** Expected Yoco payout (from snapshot or computed). */
   expectedPayoutCents: number
   /** Protected reserves (FNB floor + fuel buffer, etc.). */
   protectedCents: number
+  /** Outstanding personal advances not already reflected in fnbCents (paid from cash/Yoco Savings/other). */
+  committedCents?: number
   /** Safe to use = (FNB + expected) − protected − committed. */
   safeToUseCents: number
 }) {
@@ -58,7 +64,7 @@ export function CashPositionCard({
       >
         <Figure
           label="Available now"
-          hint="FNB operating cash + Yoco Savings"
+          hint={fnbAsOfDate ? `FNB as of ${fnbAsOfDate} + Yoco Savings` : 'FNB operating cash + Yoco Savings'}
           value={hasCash ? formatRands(availableCents) : '—'}
           muted={!hasCash}
         />
@@ -67,6 +73,12 @@ export function CashPositionCard({
           hint="Reserves that are not for spending"
           value={protectedCents > 0 ? formatRands(protectedCents) : '—'}
           muted={protectedCents === 0}
+        />
+        <Figure
+          label="Committed"
+          hint="Outstanding advances not yet in the FNB balance"
+          value={committedCents && committedCents > 0 ? formatRands(committedCents) : '—'}
+          muted={!committedCents}
         />
         <Figure
           label="Expected"
@@ -84,8 +96,10 @@ export function CashPositionCard({
 
       <p style={{ fontSize: 13, color: 'var(--ink-soft)', margin: '16px 0 0', lineHeight: 1.5 }}>
         {hasCash
-          ? 'Cash position is live from your latest snapshot. Expected cash is computed from Yoco payouts not yet settled.'
-          : 'Cash position needs FNB and Yoco Savings connected under Sync & Integrations. Once those are live, this card will show available, protected, expected and safe-to-use cash as separate figures — never combined into one number.'}
+          ? fnbAsOfDate
+            ? `FNB balance is as of ${fnbAsOfDate} (statements are only imported monthly) — Yoco keeps collecting daily in between. Expected cash is computed from Yoco payouts not yet settled.`
+            : 'Cash position is live from your latest snapshot. Expected cash is computed from Yoco payouts not yet settled.'
+          : 'Cash position needs an FNB statement imported or Yoco Savings connected under Sync & Integrations. Once those are live, this card will show available, protected, expected and safe-to-use cash as separate figures — never combined into one number.'}
       </p>
     </section>
   )

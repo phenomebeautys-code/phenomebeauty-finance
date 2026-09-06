@@ -176,7 +176,26 @@ function categoriseDescription(description: string, isPhantom: boolean) {
   ) {
     return { category: 'Stock and supplies', confidenceScore: 0.85, parseWarning: '' }
   }
-  if (lower.includes('fnb app transfer from') || lower.includes('transfer to pocket') || lower.includes('send money app')) {
+  if (
+    lower.includes('foazia') ||
+    lower.includes('shu-meez') ||
+    lower.includes('shumeez') ||
+    lower.includes('shushu') ||
+    lower.includes('send money app')
+  ) {
+    // Payments referencing the owners by name (however the bank happens to
+    // spell it) -- likely a personal draw/advance rather than a business
+    // expense or a routine internal transfer. Left for a human to tag as
+    // an actual Personal Advance (choosing which owner) since the
+    // description alone doesn't reliably say which one, or whether it's a
+    // draw versus something else entirely.
+    return {
+      category: 'Owner draw',
+      confidenceScore: 0.7,
+      parseWarning: 'Looks like a payment to one of the owners. Tag it as a Personal Advance if that\'s what it is.',
+    }
+  }
+  if (lower.includes('fnb app transfer from') || lower.includes('transfer to pocket')) {
     return { category: 'Transfer', confidenceScore: 0.8, parseWarning: '' }
   }
   if (

@@ -184,6 +184,7 @@ export interface FinanceExpense {
   business_amount_cents: number
   approval_status: 'awaiting_review' | 'approved' | 'rejected'
   receipt_url: string | null
+  bank_transaction_id: string | null
 }
 
 export interface FinancePersonalAdvance {
@@ -194,6 +195,7 @@ export interface FinancePersonalAdvance {
   paid_from: 'fnb' | 'yoco_savings' | 'cash' | 'other'
   status: 'outstanding' | 'settled' | 'carried_forward' | 'written_off'
   settled_at: string | null
+  bank_transaction_id: string | null
 }
 
 // --- Protected cash / pockets ---

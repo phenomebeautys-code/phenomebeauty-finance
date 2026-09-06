@@ -153,6 +153,7 @@ function AuthenticatedApp({ user }: { user: User }) {
               <ExpensesAndAdvances
                 expenses={finance.expenses}
                 advances={finance.advances}
+                onChanged={finance.refresh}
               />
             )}
 

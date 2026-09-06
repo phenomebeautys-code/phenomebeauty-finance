@@ -35,6 +35,9 @@ export interface FinanceOverviewData {
   latestCashSnapshot: FinanceCashSnapshot | null
   expectedYocoPayoutCents: number
   yocoPocketTransfers: YocoPocketTransfer[]
+  latestFnbClosingBalanceCents: number | null
+  latestFnbStatementEndDate: string | null
+  outstandingAdvancesCents: number
 }
 
 const EMPTY: FinanceOverviewData = {
@@ -51,6 +54,9 @@ const EMPTY: FinanceOverviewData = {
   latestCashSnapshot: null,
   expectedYocoPayoutCents: 0,
   yocoPocketTransfers: [],
+  latestFnbClosingBalanceCents: null,
+  latestFnbStatementEndDate: null,
+  outstandingAdvancesCents: 0,
 }
 
 export function useFinanceData() {
@@ -132,6 +138,17 @@ export function useFinanceData() {
     const latest = snapshots[0] || null
     const expected = (unpaidPayouts.data || []).reduce((sum, p) => sum + (p.net_amount_cents || 0), 0)
 
+    const bankImportRows = (bankImports.data as FinanceBankImport[]) ?? []
+    const successfulImports = bankImportRows
+      .filter((b) => (b.imported_count ?? 0) > 0 && b.statement_end_date)
+      .sort((a, b) => (b.statement_end_date! < a.statement_end_date! ? -1 : 1))
+    const latestSuccessfulImport = successfulImports[0] ?? null
+
+    const advanceRows = (advances.data as FinancePersonalAdvance[]) ?? []
+    const outstandingAdvancesCents = advanceRows
+      .filter((a) => a.status === 'outstanding' && a.paid_from !== 'fnb')
+      .reduce((sum, a) => sum + a.amount_cents, 0)
+
     setData({
       yocoPayments: (yocoPayments.data as YocoPayment[]) ?? [],
       yocoPayouts: (yocoPayouts.data as YocoPayout[]) ?? [],
@@ -146,6 +163,9 @@ export function useFinanceData() {
       latestCashSnapshot: latest,
       expectedYocoPayoutCents: expected,
       yocoPocketTransfers: (yocoPocketTransfers.data as YocoPocketTransfer[]) ?? [],
+      latestFnbClosingBalanceCents: latestSuccessfulImport?.closing_balance_cents ?? null,
+      latestFnbStatementEndDate: latestSuccessfulImport?.statement_end_date ?? null,
+      outstandingAdvancesCents,
     })
     setLoading(false)
   }, [])

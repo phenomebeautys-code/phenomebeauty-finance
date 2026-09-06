@@ -32,16 +32,27 @@ export function Overview({
   vehicle: FinanceVehicle | null
   vehicleReserveCents: number
 }) {
-  const { latestCashSnapshot, expectedYocoPayoutCents } = useFinanceData()
+  const { latestCashSnapshot, expectedYocoPayoutCents, latestFnbClosingBalanceCents, latestFnbStatementEndDate, outstandingAdvancesCents } = useFinanceData()
 
-  const fnbCents = latestCashSnapshot?.fnb_operating_balance_cents ?? 0
+  // Real FNB closing balance (from the latest successfully imported
+  // statement) is ground truth once it exists -- it already nets out every
+  // real expense, advance, and vehicle payment that happened via the bank.
+  // A manual snapshot is only used as a fallback before any statement has
+  // been imported, or to reflect same-day movement FNB hasn't captured yet.
+  const fnbCents = latestFnbClosingBalanceCents ?? latestCashSnapshot?.fnb_operating_balance_cents ?? 0
+  const fnbAsOfDate = latestFnbClosingBalanceCents !== null ? latestFnbStatementEndDate : null
   const yocoSavingsCents = latestCashSnapshot?.yoco_savings_balance_cents ?? 0
   const expectedPayoutCents = latestCashSnapshot?.expected_yoco_payout_cents ?? expectedYocoPayoutCents
 
   // Protected reserves from settings (R2,500 floor + R400 fuel buffer)
   const protectedCents = 250000 + 40000
 
-  const safeToUseCents = fnbCents + expectedPayoutCents - protectedCents
+  // Outstanding personal advances paid from cash/Yoco Savings/other (not
+  // FNB) are a real commitment against future cash that the FNB balance
+  // doesn't already reflect, so they come off "safe to use". Advances paid
+  // straight from FNB are already baked into fnbCents and aren't
+  // subtracted again here.
+  const safeToUseCents = fnbCents + expectedPayoutCents - protectedCents - outstandingAdvancesCents
 
   const now = new Date()
   const thisMonthKey = `${now.getFullYear()}-${now.getMonth()}`
@@ -122,9 +133,11 @@ export function Overview({
       {/* 9.3 — primary financial status */}
       <CashPositionCard
         fnbCents={fnbCents}
+        fnbAsOfDate={fnbAsOfDate}
         yocoSavingsCents={yocoSavingsCents}
         expectedPayoutCents={expectedPayoutCents}
         protectedCents={protectedCents}
+        committedCents={outstandingAdvancesCents}
         safeToUseCents={safeToUseCents}
       />
 

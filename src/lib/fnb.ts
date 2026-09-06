@@ -230,7 +230,7 @@ export async function deleteFNBImport(importId: string, storagePath: string | nu
   }
 }
 
-
+export async function confirmFNBImport(importId: string, result: FNBParseResult) {
   if (!importId) {
     throw new Error('Cannot confirm an FNB import without an import ID.')
   }

@@ -156,7 +156,7 @@ function AuthenticatedApp({ user }: { user: User }) {
               />
             )}
 
-            {tab === 'sync' && <SyncIntegrations syncRuns={finance.syncRuns} />}
+            {tab === 'sync' && <SyncIntegrations syncRuns={finance.syncRuns} bankImports={finance.bankImports} />}
 
             {tab === 'vehicle' &&
               ((checkingIn || backfillWeek) && vehicleData.vehicle ? (

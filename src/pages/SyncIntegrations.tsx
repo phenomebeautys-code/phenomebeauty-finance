@@ -1,4 +1,4 @@
-import type { YocoSyncRun } from '../lib/types'
+import type { YocoSyncRun, FinanceBankImport } from '../lib/types'
 import { SectionCard, SourceBadge } from '../components/SectionCard'
 import { Pill } from '../components/Pill'
 import { relativeTime } from '../lib/time'
@@ -10,18 +10,22 @@ const RUN_STATUS_TONE: Record<YocoSyncRun['status'], { tone: 'good' | 'warn' | '
   failed: { tone: 'warn', label: 'Failed' },
 }
 
-export function SyncIntegrations({ syncRuns }: { syncRuns: YocoSyncRun[] }) {
+export function SyncIntegrations({ syncRuns, bankImports }: { syncRuns: YocoSyncRun[]; bankImports: FinanceBankImport[] }) {
   const lastYocoRun = syncRuns[0]
   const yocoHealthy = Boolean(
     lastYocoRun && lastYocoRun.status === 'completed' &&
       Date.now() - new Date(lastYocoRun.completed_at ?? lastYocoRun.started_at).getTime() < 1000 * 60 * 60 * 48
   )
 
+  const successfulImports = bankImports.filter((b) => (b.imported_count ?? 0) > 0)
+  const lastFnbImport = successfulImports[0]
+  const fnbConnected = successfulImports.length > 0
+
   const SOURCES: { key: string; label: string; connected: boolean }[] = [
     { key: 'yoco', label: 'Yoco', connected: yocoHealthy },
     { key: 'nextslot', label: 'NextSlot', connected: true },
     { key: 'shop_admin', label: 'Shop Admin', connected: true },
-    { key: 'fnb', label: 'FNB', connected: false },
+    { key: 'fnb', label: 'FNB', connected: fnbConnected },
     { key: 'google_drive', label: 'Google Drive', connected: false },
   ]
 
@@ -52,6 +56,15 @@ export function SyncIntegrations({ syncRuns }: { syncRuns: YocoSyncRun[] }) {
                   {lastYocoRun.records_read} read · {lastYocoRun.records_inserted} inserted ·{' '}
                   {lastYocoRun.records_updated} updated
                   {lastYocoRun.records_failed > 0 && ` · ${lastYocoRun.records_failed} failed`}
+                </div>
+              </div>
+            ) : s.key === 'fnb' && lastFnbImport ? (
+              <div>
+                <div style={{ fontSize: 13, marginBottom: 4 }}>
+                  Last statement {lastFnbImport.statement_start_date} to {lastFnbImport.statement_end_date}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
+                  {lastFnbImport.imported_count} transactions imported · uploaded manually (no bank API)
                 </div>
               </div>
             ) : s.connected ? (

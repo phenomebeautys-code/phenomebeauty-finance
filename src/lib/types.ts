@@ -156,6 +156,7 @@ export interface FinanceBankImport {
   closing_balance_cents: number | null
   parse_status: 'pending' | 'parsed' | 'needs_review' | 'failed'
   imported_at: string
+  imported_count: number | null
 }
 
 export interface FinanceBankTransaction {

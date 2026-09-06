@@ -276,7 +276,7 @@ export const TRIP_CATEGORY_LABELS: Record<TripCategory, string> = {
   supplier_trip: 'Supplier trip',
   delivery: 'Delivery',
   vehicle_service: 'Vehicle service',
-  call_out: 'Client call-out',
+  call_out: 'Call-out',
   other: 'Other approved business',
 }
 

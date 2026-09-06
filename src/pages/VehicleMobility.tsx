@@ -83,7 +83,16 @@ export function VehicleMobility({
   const fuelVariance =
     latestEntry != null && expectedFuel != null ? latestEntry.fuel_spent_cents - expectedFuel : null
 
-  const missed = useMemo(() => missedWeeks(odometerEntries, 8), [odometerEntries])
+  // Tracking only started when the first odometer entry was logged; a week
+  // before that was never trackable, so it should never show as "missed".
+  const trackingStartWeek =
+    odometerEntries.length > 0
+      ? odometerEntries.reduce((min, e) => (e.week_start < min ? e.week_start : min), odometerEntries[0].week_start)
+      : undefined
+  const missed = useMemo(
+    () => missedWeeks(odometerEntries, 8, new Date(), trackingStartWeek),
+    [odometerEntries, trackingStartWeek]
+  )
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -233,7 +242,7 @@ export function VehicleMobility({
             {latestEntryTrips.length > 0 && (
               <div style={{ marginTop: 14 }}>
                 {latestEntryTrips.map((t) => (
-                  <FigureRow key={t.id} label={TRIP_CATEGORY_LABELS[t.category]} value={`${t.distance_km} km`} muted />
+                  <FigureRow key={t.id} label={tripLabel(t)} value={`${t.distance_km} km`} muted />
                 ))}
               </div>
             )}
@@ -247,6 +256,17 @@ export function VehicleMobility({
       </SectionCard>
     </div>
   )
+}
+
+function tripLabel(trip: VehicleTrip): string {
+  // Call-outs carry their destination in notes ("Call-out to <address>",
+  // set at sync time). Surface the actual address instead of the generic
+  // category name so it's clear which client/job the km belongs to.
+  if (trip.category === 'call_out' && trip.notes) {
+    const match = trip.notes.match(/^Call-out to (.+)$/)
+    if (match) return `Call-out to: ${match[1]}`
+  }
+  return TRIP_CATEGORY_LABELS[trip.category]
 }
 
 function ProgressBar({ value, total }: { value: number; total: number }) {

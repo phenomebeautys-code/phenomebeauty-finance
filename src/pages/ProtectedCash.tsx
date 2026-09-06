@@ -1,15 +1,19 @@
 import type { FinancePocket, FinancePocketSnapshot } from '../lib/types'
+import type { YocoPocketTransfer } from '../lib/useFinanceData'
 import { formatRands } from '../lib/money'
 import { SectionCard, SourceBadge, FigureRow, NotConnectedNote } from '../components/SectionCard'
 
 export function ProtectedCash({
   pockets,
   snapshots,
+  pocketTransfers,
 }: {
   pockets: FinancePocket[]
   snapshots: FinancePocketSnapshot[]
+  pocketTransfers: YocoPocketTransfer[]
 }) {
   const latestSnapshot = snapshots[0]
+  const totalWithdrawnCents = pocketTransfers.reduce((sum, t) => sum + t.signed_amount_cents, 0)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -37,8 +41,36 @@ export function ProtectedCash({
           </>
         ) : (
           <NotConnectedNote>
-            No Yoco Savings snapshot has been captured yet. Manual snapshots are the source until
-            a verified Yoco Savings API is available.
+            Yoco's API doesn't publish a Savings/Pockets balance endpoint, so a running total
+            can't be pulled automatically — a manual snapshot is the only way to record the actual
+            balance here. See "Pocket transfers from bank statements" below for real, automatically
+            synced activity in the meantime.
+          </NotConnectedNote>
+        )}
+      </SectionCard>
+
+      <SectionCard
+        eyebrow="Pocket transfers from bank statements"
+        title={pocketTransfers.length > 0 ? `${pocketTransfers.length} transfer${pocketTransfers.length === 1 ? '' : 's'} found` : undefined}
+        status={<SourceBadge state={pocketTransfers.length > 0 ? 'live' : 'not_connected'} />}
+      >
+        {pocketTransfers.length > 0 ? (
+          <>
+            <FigureRow label="Total moved from Savings to main account" value={formatRands(totalWithdrawnCents)} emphasis />
+            {pocketTransfers.slice(0, 10).map((t) => (
+              <FigureRow key={t.id} label={`${t.transaction_date} — ${t.description}`} value={formatRands(t.signed_amount_cents)} muted />
+            ))}
+            <NotConnectedNote>
+              These are FNB statement lines ("Payshap Credit Yoco Pockets...") showing money moving
+              from Yoco Savings back into the main account — real and automatically synced whenever
+              an FNB statement is imported. This only shows withdrawals: top-ups into a pocket happen
+              inside Yoco's own systems and never touch FNB, so this can't reconstruct a full running
+              Savings balance on its own.
+            </NotConnectedNote>
+          </>
+        ) : (
+          <NotConnectedNote>
+            No Yoco Pockets transfer activity found in imported FNB statements yet.
           </NotConnectedNote>
         )}
       </SectionCard>

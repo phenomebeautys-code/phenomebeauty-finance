@@ -111,12 +111,20 @@ export function recentCompletedWeeks(count: number, from: Date = new Date()): { 
   return weeks
 }
 
-/** Weeks from `recentCompletedWeeks` that don't already have an odometer entry logged. */
+/**
+ * Weeks from `recentCompletedWeeks` that don't already have an odometer entry logged.
+ * `sinceWeekStart` (ISO yyyy-mm-dd) excludes any week before tracking actually began --
+ * without it, a vehicle that only started tracking last week would show every earlier
+ * week as "missed" even though there was never any odometer data to log for them.
+ */
 export function missedWeeks(
   entries: { week_start: string }[],
   count = 8,
-  from: Date = new Date()
+  from: Date = new Date(),
+  sinceWeekStart?: string
 ): { start: Date; end: Date }[] {
   const logged = new Set(entries.map((e) => e.week_start))
-  return recentCompletedWeeks(count, from).filter((w) => !logged.has(toDateInput(w.start)))
+  const candidates = recentCompletedWeeks(count, from).filter((w) => !logged.has(toDateInput(w.start)))
+  if (!sinceWeekStart) return candidates
+  return candidates.filter((w) => toDateInput(w.start) >= sinceWeekStart)
 }

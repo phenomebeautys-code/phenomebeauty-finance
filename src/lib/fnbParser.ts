@@ -137,6 +137,13 @@ function categoriseDescription(description: string, isPhantom: boolean) {
   if (lower.includes('magtape credit yoco')) {
     return { category: 'Yoco payout', confidenceScore: 0.98, parseWarning: '' }
   }
+  if (lower.includes('yoco pockets')) {
+    // "Payshap Credit Yoco Pockets..." is money moving from Yoco Savings
+    // back into the main FNB account -- an internal transfer, not a client
+    // paying via PayShap. Must be checked before the generic 'payshap'
+    // match below, since these lines also contain the word "Payshap".
+    return { category: 'Yoco Savings transfer', confidenceScore: 0.9, parseWarning: '' }
+  }
   if (lower.includes('payshap')) {
     return { category: 'Client payment', confidenceScore: 0.9, parseWarning: '' }
   }

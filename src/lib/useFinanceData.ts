@@ -14,6 +14,13 @@ import type {
   FinanceCashSnapshot,
 } from './types'
 
+export interface YocoPocketTransfer {
+  id: string
+  transaction_date: string
+  description: string
+  signed_amount_cents: number
+}
+
 export interface FinanceOverviewData {
   yocoPayments: YocoPayment[]
   yocoPayouts: YocoPayout[]
@@ -27,6 +34,7 @@ export interface FinanceOverviewData {
   cashSnapshots: FinanceCashSnapshot[]
   latestCashSnapshot: FinanceCashSnapshot | null
   expectedYocoPayoutCents: number
+  yocoPocketTransfers: YocoPocketTransfer[]
 }
 
 const EMPTY: FinanceOverviewData = {
@@ -42,6 +50,7 @@ const EMPTY: FinanceOverviewData = {
   cashSnapshots: [],
   latestCashSnapshot: null,
   expectedYocoPayoutCents: 0,
+  yocoPocketTransfers: [],
 }
 
 export function useFinanceData() {
@@ -71,6 +80,7 @@ export function useFinanceData() {
       pocketSnapshots,
       cashSnapshots,
       unpaidPayouts,
+      yocoPocketTransfers,
     ] = await Promise.all([
       supabase.from('yoco_payments').select('*').order('yoco_created_at', { ascending: false }).limit(200),
       supabase.from('yoco_payouts').select('*').order('payout_date', { ascending: false }).limit(100),
@@ -86,6 +96,17 @@ export function useFinanceData() {
         .from('yoco_payouts')
         .select('net_amount_cents')
         .neq('status', 'paid'),
+      // Not a live Yoco Savings balance -- Yoco's public API has no Savings/
+      // Pockets endpoint. This is the best real signal available: FNB
+      // statement lines showing money moving from a Yoco Pocket back into
+      // the main account (withdrawals only; top-ups happen inside Yoco's
+      // own rails and never touch FNB, so a running balance can't be
+      // reconstructed from bank data alone).
+      supabase
+        .from('finance_bank_transactions')
+        .select('id, transaction_date, description, signed_amount_cents')
+        .eq('category', 'Yoco Savings transfer')
+        .order('transaction_date', { ascending: false }),
     ])
 
     const firstError = [
@@ -100,6 +121,7 @@ export function useFinanceData() {
       pocketSnapshots,
       cashSnapshots,
       unpaidPayouts,
+      yocoPocketTransfers,
     ].find((r) => r.error)?.error
 
     if (firstError) {
@@ -123,6 +145,7 @@ export function useFinanceData() {
       cashSnapshots: snapshots,
       latestCashSnapshot: latest,
       expectedYocoPayoutCents: expected,
+      yocoPocketTransfers: (yocoPocketTransfers.data as YocoPocketTransfer[]) ?? [],
     })
     setLoading(false)
   }, [])

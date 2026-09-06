@@ -145,6 +145,7 @@ function AuthenticatedApp({ user }: { user: User }) {
               <ProtectedCash
                 pockets={finance.pockets}
                 snapshots={finance.pocketSnapshots}
+                pocketTransfers={finance.yocoPocketTransfers}
               />
             )}
 

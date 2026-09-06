@@ -5,6 +5,7 @@ import type { FinanceVehicle, VehicleOdometerEntry, VehicleTrip, VehicleContribu
 export interface CallOutSummary {
   completedCount: number
   totalFeesCents: number
+  totalDistanceKm: number
 }
 
 interface VehicleData {
@@ -20,7 +21,7 @@ const EMPTY: VehicleData = {
   odometerEntries: [],
   trips: [],
   contributions: [],
-  callOutSummary: { completedCount: 0, totalFeesCents: 0 },
+  callOutSummary: { completedCount: 0, totalFeesCents: 0, totalDistanceKm: 0 },
 }
 
 export function useVehicleData() {
@@ -77,7 +78,7 @@ export function useVehicleData() {
         .select('*')
         .eq('vehicle_id', vehicle.id)
         .order('trip_date', { ascending: false })
-        .limit(50),
+        .limit(250),
       supabase
         .from('finance_vehicle_contributions')
         .select('*')
@@ -86,7 +87,7 @@ export function useVehicleData() {
         .limit(20),
       supabase
         .from('nextslot_bookings_mirror')
-        .select('call_out_fee, completed_at, is_call_out')
+        .select('call_out_fee, call_out_distance_km, completed_at, is_call_out')
         .eq('is_call_out', true)
         .not('completed_at', 'is', null)
         .gte('completed_at', thirtyDaysAgo.toISOString()),
@@ -95,10 +96,11 @@ export function useVehicleData() {
     const firstError = [odometerEntries, trips, contributions, callOuts].find((r) => r.error)?.error
     if (firstError) setError(firstError.message)
 
-    const callOutRows = (callOuts.data as { call_out_fee: number | null }[]) ?? []
+    const callOutRows = (callOuts.data as { call_out_fee: number | null; call_out_distance_km: number | null }[]) ?? []
     const callOutSummary: CallOutSummary = {
       completedCount: callOutRows.length,
       totalFeesCents: Math.round(callOutRows.reduce((sum, r) => sum + (r.call_out_fee ?? 0), 0) * 100),
+      totalDistanceKm: callOutRows.reduce((sum, r) => sum + (r.call_out_distance_km ?? 0), 0),
     }
 
     setData({

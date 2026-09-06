@@ -116,7 +116,28 @@ Deno.serve(async (req) => {
       matchSummary = { success: false, error: matchErr instanceof Error ? matchErr.message : 'Matching call failed.' }
     }
 
-    return Response.json({ success: true, imported, skipped, matching: matchSummary }, { headers: corsHeaders })
+    // Same best-effort pattern: detect real vehicle-finance debits (e.g.
+    // "FNB App Rtc Pmt To Car") and turn them into vehicle contributions so
+    // the settlement gap actually deducts real payments made.
+    let vehicleContributionSummary: Record<string, unknown> | null = null
+    try {
+      const contribResponse = await fetch(`${supabaseUrl}/functions/v1/sync-vehicle-contributions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${serviceRoleKey}`,
+        },
+        body: JSON.stringify({ bankImportId: importId }),
+      })
+      vehicleContributionSummary = await contribResponse.json().catch(() => null)
+    } catch (contribErr) {
+      vehicleContributionSummary = { success: false, error: contribErr instanceof Error ? contribErr.message : 'Vehicle contribution sync call failed.' }
+    }
+
+    return Response.json(
+      { success: true, imported, skipped, matching: matchSummary, vehicleContributions: vehicleContributionSummary },
+      { headers: corsHeaders }
+    )
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Finalization failed.'
     return Response.json({ success: false, error: message }, { status: 500, headers: corsHeaders })

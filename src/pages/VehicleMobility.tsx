@@ -35,10 +35,19 @@ export function VehicleMobility({
   onBackfillWeek: (week: { start: Date; end: Date }) => void
 }) {
   const latestEntry = odometerEntries[0]
-  const latestEntryTrips = useMemo(
-    () => trips.filter((t) => t.odometer_entry_id === latestEntry?.id),
-    [trips, latestEntry]
-  )
+  const latestEntryTrips = useMemo(() => {
+    if (!latestEntry) return []
+    // Trips logged manually at Sunday check-in are linked directly via
+    // odometer_entry_id. Call-out trips are synced automatically from
+    // NextSlot bookings and never get that link, so they're matched by
+    // falling within the entry's week range instead. A trip only needs to
+    // satisfy one of the two to count.
+    return trips.filter(
+      (t) =>
+        t.odometer_entry_id === latestEntry.id ||
+        (t.trip_date >= latestEntry.week_start && t.trip_date <= latestEntry.week_end)
+    )
+  }, [trips, latestEntry])
 
   if (!vehicle) {
     return (
@@ -51,8 +60,9 @@ export function VehicleMobility({
     )
   }
 
-  // Call-out km isn't tracked yet (NextSlot doesn't record distance per booking),
-  // so business km for now is approved trips only — flagged honestly below.
+  // Business km = all approved trips for the week, which now includes
+  // call-out trips auto-synced from NextSlot bookings (category 'call_out')
+  // alongside manually logged stock/supplier/delivery trips.
   const businessKm = latestEntry ? businessKmForWeek(0, latestEntryTrips) : 0
   const variance = latestEntry ? weekVariance(latestEntry, businessKm) : null
 
@@ -167,10 +177,11 @@ export function VehicleMobility({
       <SectionCard eyebrow="Call-out economics" title="Last 30 days" status={<SourceBadge state="live" />}>
         <FigureRow label="Completed call-outs" value={String(callOutSummary.completedCount)} />
         <FigureRow label="Call-out fees" value={formatRands(callOutSummary.totalFeesCents)} emphasis />
+        <FigureRow label="Call-out distance" value={`${callOutSummary.totalDistanceKm} km`} />
         <NotConnectedNote>
-          NextSlot doesn't record distance per call-out yet, so supported business kilometres and
-          expected fuel cost can't be calculated from call-outs alone. Approved trips logged at
-          Sunday check-in are used for kilometre tracking below instead.
+          Call-out distance is synced automatically from NextSlot bookings each day and included in
+          this week's business kilometres and expected fuel cost below, alongside any trips logged
+          manually at Sunday check-in.
         </NotConnectedNote>
       </SectionCard>
 

@@ -248,7 +248,7 @@ export interface VehicleOdometerEntry {
   submitted_at: string
 }
 
-export type TripCategory = 'stock_collection' | 'supplier_trip' | 'delivery' | 'vehicle_service' | 'other'
+export type TripCategory = 'stock_collection' | 'supplier_trip' | 'delivery' | 'vehicle_service' | 'call_out' | 'other'
 
 export interface VehicleTrip {
   id: string
@@ -259,6 +259,7 @@ export interface VehicleTrip {
   distance_km: number
   notes: string | null
   approved: boolean
+  source_booking_id: string | null
 }
 
 export interface VehicleContribution {
@@ -267,6 +268,7 @@ export interface VehicleContribution {
   week_start: string
   amount_cents: number
   notes: string | null
+  source_bank_transaction_id: string | null
 }
 
 export const TRIP_CATEGORY_LABELS: Record<TripCategory, string> = {
@@ -274,6 +276,7 @@ export const TRIP_CATEGORY_LABELS: Record<TripCategory, string> = {
   supplier_trip: 'Supplier trip',
   delivery: 'Delivery',
   vehicle_service: 'Vehicle service',
+  call_out: 'Client call-out',
   other: 'Other approved business',
 }
 

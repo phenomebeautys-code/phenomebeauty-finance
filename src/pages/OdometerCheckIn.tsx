@@ -211,11 +211,15 @@ export function OdometerCheckIn({
                   onChange={(e) => updateTrip(t.id, { category: e.target.value as TripCategory })}
                   className="sale-line-type"
                 >
-                  {(Object.keys(TRIP_CATEGORY_LABELS) as TripCategory[]).map((c) => (
-                    <option key={c} value={c}>
-                      {TRIP_CATEGORY_LABELS[c]}
-                    </option>
-                  ))}
+                  {(Object.keys(TRIP_CATEGORY_LABELS) as TripCategory[])
+                    // Call-outs are synced automatically from NextSlot bookings each day;
+                    // offering it here would let the same trip get logged (and counted) twice.
+                    .filter((c) => c !== 'call_out')
+                    .map((c) => (
+                      <option key={c} value={c}>
+                        {TRIP_CATEGORY_LABELS[c]}
+                      </option>
+                    ))}
                 </select>
                 <input
                   type="text"

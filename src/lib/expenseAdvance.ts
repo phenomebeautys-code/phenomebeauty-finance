@@ -63,8 +63,8 @@ export async function createExpense(input: ExpenseInput) {
     throw new Error('Business use percent must be between 0 and 100.')
   }
 
-  const businessAmountCents = Math.round((input.grossAmountCents * input.businessUsePercent) / 100)
-
+  // business_amount_cents is a generated column (gross * percent / 100) --
+  // must not be included in the insert payload.
   const { error } = await supabase.from('finance_expenses').insert({
     expense_date: input.expenseDate,
     description: input.description,
@@ -72,7 +72,6 @@ export async function createExpense(input: ExpenseInput) {
     paid_from: input.paidFrom,
     gross_amount_cents: input.grossAmountCents,
     business_use_percent: input.businessUsePercent,
-    business_amount_cents: businessAmountCents,
     approval_status: input.approvalStatus ?? 'approved',
     bank_transaction_id: input.bankTransactionId ?? null,
   })

@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { parseFNBStatementFromFile } from '../lib/fnbParser'
-import { uploadFNBPDF, saveParsedRows, confirmFNBImport, finalizeFNBImport } from '../lib/fnb'
+import { uploadFNBPDF, saveParsedRows, confirmFNBImport, finalizeFNBImport, listFNBImports, deleteFNBImport, type FNBImportSummary } from '../lib/fnb'
 import type { FNBParseResult, ParsedTransaction } from '../lib/types-fnb'
 
 export default function FNBImport() {
@@ -10,6 +10,57 @@ export default function FNBImport() {
   const [parseResult, setParseResult] = useState<FNBParseResult | null>(null)
   const [transactions, setTransactions] = useState<ParsedTransaction[]>([])
   const [error, setError] = useState<string>('')
+  const [imports, setImports] = useState<FNBImportSummary[]>([])
+  const [importsLoading, setImportsLoading] = useState(true)
+  const [importsError, setImportsError] = useState('')
+  const [deletingId, setDeletingId] = useState<string>('')
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string>('')
+
+  async function refreshImports() {
+    setImportsLoading(true)
+    setImportsError('')
+    try {
+      const rows = await listFNBImports()
+      setImports(rows)
+    } catch (err) {
+      setImportsError(err instanceof Error ? err.message : 'Could not load imported statements.')
+    } finally {
+      setImportsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    refreshImports()
+  }, [])
+
+  async function handleDelete(row: FNBImportSummary) {
+    setDeletingId(row.id)
+    try {
+      await deleteFNBImport(row.id, row.storagePath)
+      setConfirmDeleteId('')
+      await refreshImports()
+    } catch (err) {
+      setImportsError(err instanceof Error ? err.message : 'Could not delete this import.')
+    } finally {
+      setDeletingId('')
+    }
+  }
+
+  // Flag imports sharing the same statement period as a real, prior
+  // *successful* import (transactionCount > 0) as duplicates -- a
+  // pending/failed retry with 0 transactions for the same period isn't a
+  // meaningful duplicate on its own, but two successful imports of the same
+  // period would double-count every transaction.
+  const periodKey = (row: FNBImportSummary) => `${row.statementStartDate ?? ''}::${row.statementEndDate ?? ''}`
+  const successfulPeriods = new Map<string, number>()
+  for (const row of imports) {
+    if (row.transactionCount > 0 && row.statementStartDate) {
+      const key = periodKey(row)
+      successfulPeriods.set(key, (successfulPeriods.get(key) ?? 0) + 1)
+    }
+  }
+  const isDuplicatePeriod = (row: FNBImportSummary) =>
+    row.statementStartDate !== null && (successfulPeriods.get(periodKey(row)) ?? 0) > 1
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const uploadedFile = e.target.files?.[0]
@@ -51,6 +102,7 @@ export default function FNBImport() {
       await confirmFNBImport(importId, parseResult)
       await finalizeFNBImport(importId)
       setStep('complete')
+      await refreshImports()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Import failed')
       setStep('preview')
@@ -155,6 +207,85 @@ export default function FNBImport() {
           <button onClick={() => { setStep('upload'); setFile(null); setParseResult(null); setTransactions([]); }} className="mt-6 py-3 px-6 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700">Import Another</button>
         </div>
       )}
+
+      <div className="mt-10 pt-8 border-t border-gray-200">
+        <h2 className="text-lg font-semibold mb-3">Imported statements</h2>
+        {importsError && (<div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">{importsError}</div>)}
+        {importsLoading ? (
+          <div className="text-gray-500 text-sm">Loading...</div>
+        ) : imports.length === 0 ? (
+          <div className="text-gray-500 text-sm">No FNB statements have been uploaded yet.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
+              <thead className="bg-gray-100">
+                <tr>
+                  <th className="px-3 py-2 text-left">Period</th>
+                  <th className="px-3 py-2 text-left">File</th>
+                  <th className="px-3 py-2 text-left">Status</th>
+                  <th className="px-3 py-2 text-right">Transactions</th>
+                  <th className="px-3 py-2 text-right">Variance</th>
+                  <th className="px-3 py-2 text-left">Uploaded</th>
+                  <th className="px-3 py-2 text-center">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {imports.map((row) => {
+                  const duplicate = isDuplicatePeriod(row)
+                  return (
+                    <tr key={row.id} className={`border-t ${duplicate ? 'bg-amber-50' : ''}`}>
+                      <td className="px-3 py-2">
+                        {row.statementStartDate && row.statementEndDate
+                          ? `${row.statementStartDate} to ${row.statementEndDate}`
+                          : <span className="text-gray-400">Not parsed</span>}
+                        {duplicate && (
+                          <span className="ml-2 inline-block px-2 py-0.5 rounded text-xs bg-amber-200 text-amber-900">Possible duplicate</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-gray-500 truncate max-w-[160px]" title={row.sourceFilename ?? ''}>{row.sourceFilename}</td>
+                      <td className="px-3 py-2">
+                        <span className={`inline-block px-2 py-0.5 rounded text-xs ${
+                          row.parseStatus === 'parsed' && row.transactionCount > 0 ? 'bg-green-100 text-green-800'
+                          : row.parseStatus === 'needs_review' ? 'bg-red-100 text-red-800'
+                          : 'bg-gray-100 text-gray-700'
+                        }`}>
+                          {row.transactionCount > 0 ? 'Imported' : row.parseStatus ?? 'pending'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-right">{row.transactionCount}</td>
+                      <td className="px-3 py-2 text-right">
+                        {row.balanceVarianceCents !== null ? formatMoney(row.balanceVarianceCents) : '—'}
+                      </td>
+                      <td className="px-3 py-2 text-gray-500">{new Date(row.createdAt).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
+                      <td className="px-3 py-2 text-center">
+                        {confirmDeleteId === row.id ? (
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => handleDelete(row)}
+                              disabled={deletingId === row.id}
+                              className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+                            >
+                              {deletingId === row.id ? 'Deleting...' : 'Confirm delete'}
+                            </button>
+                            <button onClick={() => setConfirmDeleteId('')} className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setConfirmDeleteId(row.id)}
+                            className="px-2 py-1 text-xs border border-red-300 text-red-700 rounded hover:bg-red-50"
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

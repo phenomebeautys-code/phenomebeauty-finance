@@ -45,7 +45,7 @@ Deno.serve(async (req) => {
 
     // Only debits categorised as vehicle finance AND whose description
     // clearly names the car (e.g. "FNB App Rtc Pmt To Car"). This is
-    // intentionally narrower than the full 'vehicle_finance' category used
+    // intentionally narrower than the full 'Vehicle finance' category used
     // in the ledger (which also catches ambiguous ABSA/DebiCheck collection
     // attempts that may not be the car instalment at all) -- we'd rather
     // under-count real payments and let a human add the rest than
@@ -53,7 +53,9 @@ Deno.serve(async (req) => {
     let txQuery = db
       .from('finance_bank_transactions')
       .select('id, transaction_date, description, signed_amount_cents, category, bank_import_id')
-      .eq('category', 'vehicle_finance')
+      // Exact string the client-side FNB parser (src/lib/fnbParser.ts)
+      // assigns -- keep in sync if that categorisation changes.
+      .eq('category', 'Vehicle finance')
       .lt('signed_amount_cents', 0)
       .ilike('description', '%car%')
     if (bankImportId) txQuery = txQuery.eq('bank_import_id', bankImportId)

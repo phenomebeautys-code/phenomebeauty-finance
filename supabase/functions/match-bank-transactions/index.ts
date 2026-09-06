@@ -46,7 +46,9 @@ Deno.serve(async (req) => {
     let txQuery = db
       .from('finance_bank_transactions')
       .select('id, transaction_date, description, signed_amount_cents, category, bank_import_id')
-      .in('category', ['yoco_payout', 'payshap_candidate'])
+      // These are the exact category strings the client-side FNB parser
+      // (src/lib/fnbParser.ts) assigns -- keep in sync if that categorisation changes.
+      .in('category', ['Yoco payout', 'Client payment'])
     if (bankImportId) txQuery = txQuery.eq('bank_import_id', bankImportId)
 
     const { data: bankRows, error: bankErr } = await txQuery
@@ -63,7 +65,7 @@ Deno.serve(async (req) => {
 
     // --- Yoco payout matching: FNB "Magtape Credit Yoco" rows against
     // yoco_payouts.net_amount_cents (what actually lands in the bank). ---
-    const payoutCandidates = candidateRows.filter((r) => r.category === 'yoco_payout' && (r.signed_amount_cents as number) > 0)
+    const payoutCandidates = candidateRows.filter((r) => r.category === 'Yoco payout' && (r.signed_amount_cents as number) > 0)
     summary.yoco_payout_candidates = payoutCandidates.length
 
     if (payoutCandidates.length > 0) {
@@ -111,7 +113,7 @@ Deno.serve(async (req) => {
     // they've been promoted into finance_sales). These stay in 'suggested'
     // status - a bank credit alone is not proof of a specific sale, so a
     // human has to confirm before it counts as revenue. ---
-    const payshapCandidates = candidateRows.filter((r) => r.category === 'payshap_candidate' && (r.signed_amount_cents as number) > 0)
+    const payshapCandidates = candidateRows.filter((r) => r.category === 'Client payment' && (r.signed_amount_cents as number) > 0)
     summary.payshap_candidates = payshapCandidates.length
 
     if (payshapCandidates.length > 0) {

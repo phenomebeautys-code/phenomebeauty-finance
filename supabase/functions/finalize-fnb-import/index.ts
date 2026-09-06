@@ -72,7 +72,6 @@ Deno.serve(async (req) => {
         raw_reference: row.raw_reference,
         signed_amount_cents: signedAmountCents,
         running_balance_cents: row.running_balance_cents,
-        direction: row.direction,
         transaction_fingerprint: fingerprint,
         category: row.suggested_category,
         business_status: 'unreviewed',

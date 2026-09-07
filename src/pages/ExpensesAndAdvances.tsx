@@ -36,7 +36,7 @@ function ClassifyRow({
 }) {
   const [mode, setMode] = useState<'closed' | 'expense' | 'advance'>('closed')
   const [category, setCategory] = useState(EXPENSE_CATEGORIES[0])
-  const [businessPercent, setBusinessPercent] = useState('100')
+  const [businessUse, setBusinessUse] = useState<'personal' | 'business'>('business')
   const [personName, setPersonName] = useState<'Shu-meez' | 'Arshad'>('Shu-meez')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -53,7 +53,7 @@ function ClassifyRow({
         category,
         paidFrom: 'fnb',
         grossAmountCents: amountCents,
-        businessUsePercent: Number(businessPercent),
+        businessUsePercent: businessUse === 'business' ? 100 : 0,
         bankTransactionId: tx.id,
       })
       onClassified()
@@ -122,16 +122,26 @@ function ClassifyRow({
           <select value={category} onChange={(e) => setCategory(e.target.value)} style={{ fontSize: 12, padding: '4px 6px' }}>
             {EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
-          <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
-            % business
-            <input
-              type="number"
-              min={0}
-              max={100}
-              value={businessPercent}
-              onChange={(e) => setBusinessPercent(e.target.value)}
-              style={{ width: 56, fontSize: 12, padding: '4px 6px' }}
-            />
+          <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span>Use</span>
+            <span style={{ display: 'inline-flex', border: '1px solid var(--line)', borderRadius: 6, overflow: 'hidden' }}>
+              <button
+                type="button"
+                onClick={() => setBusinessUse('personal')}
+                className={businessUse === 'personal' ? 'primary-button' : 'secondary-button'}
+                style={{ fontSize: 12, padding: '4px 10px', borderRadius: 0, border: 'none', margin: 0 }}
+              >
+                Personal
+              </button>
+              <button
+                type="button"
+                onClick={() => setBusinessUse('business')}
+                className={businessUse === 'business' ? 'primary-button' : 'secondary-button'}
+                style={{ fontSize: 12, padding: '4px 10px', borderRadius: 0, border: 'none', margin: 0 }}
+              >
+                Business
+              </button>
+            </span>
           </label>
           <button onClick={handleSaveExpense} disabled={saving} className="primary-button" style={{ fontSize: 12, padding: '4px 10px' }}>
             {saving ? 'Saving…' : 'Save'}
@@ -265,7 +275,7 @@ export function ExpensesAndAdvances({
                 <div>
                   <div style={{ fontSize: 13.5 }}>{e.description}</div>
                   <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 2 }}>
-                    {e.expense_date} · {e.category} · {e.business_use_percent}% business
+                    {e.expense_date} · {e.category} · {e.business_use_percent >= 50 ? 'Business' : 'Personal'}
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

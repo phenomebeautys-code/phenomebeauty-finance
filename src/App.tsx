@@ -123,6 +123,7 @@ function AuthenticatedApp({ user }: { user: User }) {
                 syncStale={syncStale}
                 vehicle={vehicleData.vehicle}
                 vehicleReserveCents={vehicleReserveCents}
+                onSaleChanged={refresh}
               />
             )}
 

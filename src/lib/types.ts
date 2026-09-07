@@ -13,7 +13,7 @@ export type ReconciliationStatus =
   | 'awaiting_review'
   | 'excluded'
 
-export type PaymentMethod = 'yoco_card' | 'eft' | 'cash' | 'yoco_online' | 'other'
+export type PaymentMethod = 'yoco_card' | 'yoco_online' | 'payshap' | 'eft' | 'cash' | 'other'
 
 export type LineType = 'service' | 'call_out' | 'product' | 'delivery' | 'discount' | 'refund'
 

@@ -1,5 +1,5 @@
 // src/pages/Overview.tsx
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { FinanceSaleWithLines, LineType, FinanceVehicle } from '../lib/types'
 import { LINE_TYPE_LABELS } from '../lib/types'
 import { formatRands } from '../lib/money'
@@ -8,8 +8,10 @@ import { StatusPill } from '../components/StatusPill'
 import { CashPositionCard } from '../components/CashPositionCard'
 import { SectionCard, SourceBadge, FigureRow, NotConnectedNote } from '../components/SectionCard'
 import { AttentionPanel, type AttentionItem } from '../components/AttentionPanel'
+import { ToggleGroup } from '../components/ToggleGroup'
 import { weeksRemaining, requiredWeeklyContribution } from '../lib/vehicleCalc'
 import { useFinanceData } from '../lib/useFinanceData'
+import { verifySale } from '../lib/salesReview'
 
 function todayLabel(): string {
   return new Date().toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -25,12 +27,14 @@ export function Overview({
   syncStale,
   vehicle,
   vehicleReserveCents,
+  onSaleChanged,
 }: {
   sales: FinanceSaleWithLines[]
   reconciliationExceptions: number
   syncStale: boolean
   vehicle: FinanceVehicle | null
   vehicleReserveCents: number
+  onSaleChanged?: () => void
 }) {
   const { latestCashSnapshot, expectedYocoPayoutCents, latestFnbClosingBalanceCents, latestFnbStatementEndDate, outstandingAdvancesCents } = useFinanceData()
 
@@ -284,7 +288,7 @@ export function Overview({
           <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 16, margin: '0 0 12px' }}>
             Recent sales
           </h3>
-          <SalesLedger sales={sales.slice(0, 8)} />
+          <SalesLedger sales={sales.slice(0, 8)} onSaleChanged={onSaleChanged} />
         </section>
       )}
     </div>
@@ -300,7 +304,36 @@ function Legend({ swatch, label }: { swatch: string; label: string }) {
   )
 }
 
-function SalesLedger({ sales }: { sales: FinanceSaleWithLines[] }) {
+function SaleReviewControl({ saleId, onSaleChanged }: { saleId: string; onSaleChanged?: () => void }) {
+  const [method, setMethod] = useState<'Yoco' | 'PayShap'>('Yoco')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleVerify() {
+    setSaving(true)
+    setError('')
+    try {
+      await verifySale(saleId, method === 'Yoco' ? 'yoco_card' : 'payshap')
+      onSaleChanged?.()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not verify this sale.')
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+      <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>Paid via</span>
+      <ToggleGroup<'Yoco' | 'PayShap'> options={['Yoco', 'PayShap']} value={method} onChange={setMethod} />
+      <button onClick={handleVerify} disabled={saving} className="primary-button" style={{ fontSize: 12, padding: '4px 10px' }}>
+        {saving ? 'Verifying…' : 'Verify'}
+      </button>
+      {error && <span style={{ color: '#b91c1c', fontSize: 12 }}>{error}</span>}
+    </div>
+  )
+}
+
+function SalesLedger({ sales, onSaleChanged }: { sales: FinanceSaleWithLines[]; onSaleChanged?: () => void }) {
   return (
     <div style={{ border: '1px solid var(--line)', borderRadius: 6, overflow: 'hidden' }}>
       {sales.map((sale, i) => {
@@ -342,6 +375,9 @@ function SalesLedger({ sales }: { sales: FinanceSaleWithLines[] }) {
               <div style={{ marginTop: 8 }}>
                 <SplitBar segments={segments} height={6} />
               </div>
+            )}
+            {sale.reconciliation_status === 'awaiting_review' && (
+              <SaleReviewControl saleId={sale.id} onSaleChanged={onSaleChanged} />
             )}
           </div>
         )

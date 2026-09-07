@@ -3,6 +3,7 @@ import type { FinanceExpense, FinancePersonalAdvance } from '../lib/types'
 import { formatRands } from '../lib/money'
 import { SectionCard, SourceBadge, NotConnectedNote } from '../components/SectionCard'
 import { Pill } from '../components/Pill'
+import { ToggleGroup } from '../components/ToggleGroup'
 import {
   listUnclassifiedTransactions,
   createExpense,
@@ -26,41 +27,6 @@ const ADVANCE_STATUS: Record<FinancePersonalAdvance['status'], { tone: 'good' | 
 }
 
 const EXPENSE_CATEGORIES = ['Stock and supplies', 'Fuel', 'Utilities', 'Bank fees', 'Marketing', 'Equipment', 'Other']
-
-/** A small segmented two-option toggle, used for Personal/Business and Shu-meez/Arshad. Both
- * buttons share a fixed min-width so the two toggles line up symmetrically next to each other. */
-function ToggleGroup<T extends string>({
-  options,
-  value,
-  onChange,
-}: {
-  options: [T, T]
-  value: T
-  onChange: (next: T) => void
-}) {
-  return (
-    <span style={{ display: 'inline-flex', border: '1px solid var(--line)', borderRadius: 6, overflow: 'hidden' }}>
-      {options.map((opt) => (
-        <button
-          key={opt}
-          type="button"
-          onClick={() => onChange(opt)}
-          className={value === opt ? 'primary-button' : 'secondary-button'}
-          style={{
-            fontSize: 12,
-            padding: '4px 10px',
-            minWidth: 72,
-            borderRadius: 0,
-            border: 'none',
-            margin: 0,
-          }}
-        >
-          {opt}
-        </button>
-      ))}
-    </span>
-  )
-}
 
 function ClassifyRow({
   tx,

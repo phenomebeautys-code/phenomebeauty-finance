@@ -51,6 +51,7 @@ export interface ExpenseInput {
   paidFrom: 'fnb' | 'yoco_savings' | 'cash' | 'personal' | 'other'
   grossAmountCents: number
   businessUsePercent: number
+  personName: 'Shu-meez' | 'Arshad'
   bankTransactionId?: string | null
   approvalStatus?: 'awaiting_review' | 'approved' | 'rejected'
 }
@@ -72,6 +73,7 @@ export async function createExpense(input: ExpenseInput) {
     paid_from: input.paidFrom,
     gross_amount_cents: input.grossAmountCents,
     business_use_percent: input.businessUsePercent,
+    person_name: input.personName,
     approval_status: input.approvalStatus ?? 'approved',
     bank_transaction_id: input.bankTransactionId ?? null,
   })

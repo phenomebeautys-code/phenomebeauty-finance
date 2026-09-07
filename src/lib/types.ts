@@ -185,6 +185,7 @@ export interface FinanceExpense {
   approval_status: 'awaiting_review' | 'approved' | 'rejected'
   receipt_url: string | null
   bank_transaction_id: string | null
+  person_name: 'Shu-meez' | 'Arshad' | null
 }
 
 export interface FinancePersonalAdvance {

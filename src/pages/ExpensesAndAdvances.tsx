@@ -27,6 +27,41 @@ const ADVANCE_STATUS: Record<FinancePersonalAdvance['status'], { tone: 'good' | 
 
 const EXPENSE_CATEGORIES = ['Stock and supplies', 'Fuel', 'Utilities', 'Bank fees', 'Marketing', 'Equipment', 'Other']
 
+/** A small segmented two-option toggle, used for Personal/Business and Shu-meez/Arshad. Both
+ * buttons share a fixed min-width so the two toggles line up symmetrically next to each other. */
+function ToggleGroup<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: [T, T]
+  value: T
+  onChange: (next: T) => void
+}) {
+  return (
+    <span style={{ display: 'inline-flex', border: '1px solid var(--line)', borderRadius: 6, overflow: 'hidden' }}>
+      {options.map((opt) => (
+        <button
+          key={opt}
+          type="button"
+          onClick={() => onChange(opt)}
+          className={value === opt ? 'primary-button' : 'secondary-button'}
+          style={{
+            fontSize: 12,
+            padding: '4px 10px',
+            minWidth: 72,
+            borderRadius: 0,
+            border: 'none',
+            margin: 0,
+          }}
+        >
+          {opt}
+        </button>
+      ))}
+    </span>
+  )
+}
+
 function ClassifyRow({
   tx,
   onClassified,
@@ -54,6 +89,7 @@ function ClassifyRow({
         paidFrom: 'fnb',
         grossAmountCents: amountCents,
         businessUsePercent: businessUse === 'business' ? 100 : 0,
+        personName,
         bankTransactionId: tx.id,
       })
       onClassified()
@@ -124,24 +160,11 @@ function ClassifyRow({
           </select>
           <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
             <span>Use</span>
-            <span style={{ display: 'inline-flex', border: '1px solid var(--line)', borderRadius: 6, overflow: 'hidden' }}>
-              <button
-                type="button"
-                onClick={() => setBusinessUse('personal')}
-                className={businessUse === 'personal' ? 'primary-button' : 'secondary-button'}
-                style={{ fontSize: 12, padding: '4px 10px', borderRadius: 0, border: 'none', margin: 0 }}
-              >
-                Personal
-              </button>
-              <button
-                type="button"
-                onClick={() => setBusinessUse('business')}
-                className={businessUse === 'business' ? 'primary-button' : 'secondary-button'}
-                style={{ fontSize: 12, padding: '4px 10px', borderRadius: 0, border: 'none', margin: 0 }}
-              >
-                Business
-              </button>
-            </span>
+            <ToggleGroup<'Personal' | 'Business'> options={['Personal', 'Business']} value={businessUse === 'business' ? 'Business' : 'Personal'} onChange={(v) => setBusinessUse(v === 'Business' ? 'business' : 'personal')} />
+          </label>
+          <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span>By</span>
+            <ToggleGroup<'Shu-meez' | 'Arshad'> options={['Shu-meez', 'Arshad']} value={personName} onChange={setPersonName} />
           </label>
           <button onClick={handleSaveExpense} disabled={saving} className="primary-button" style={{ fontSize: 12, padding: '4px 10px' }}>
             {saving ? 'Saving…' : 'Save'}
@@ -152,10 +175,10 @@ function ClassifyRow({
 
       {mode === 'advance' && (
         <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <select value={personName} onChange={(e) => setPersonName(e.target.value as 'Shu-meez' | 'Arshad')} style={{ fontSize: 12, padding: '4px 6px' }}>
-            <option value="Shu-meez">Shu-meez</option>
-            <option value="Arshad">Arshad</option>
-          </select>
+          <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span>For</span>
+            <ToggleGroup<'Shu-meez' | 'Arshad'> options={['Shu-meez', 'Arshad']} value={personName} onChange={setPersonName} />
+          </label>
           <button onClick={handleSaveAdvance} disabled={saving} className="primary-button" style={{ fontSize: 12, padding: '4px 10px' }}>
             {saving ? 'Saving…' : 'Save'}
           </button>
@@ -276,6 +299,7 @@ export function ExpensesAndAdvances({
                   <div style={{ fontSize: 13.5 }}>{e.description}</div>
                   <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 2 }}>
                     {e.expense_date} · {e.category} · {e.business_use_percent >= 50 ? 'Business' : 'Personal'}
+                    {e.person_name ? ` · ${e.person_name}` : ''}
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

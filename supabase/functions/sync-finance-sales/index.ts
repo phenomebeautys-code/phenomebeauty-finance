@@ -92,7 +92,7 @@ Deno.serve(async (req) => {
     // ---- Build every finance_sales row to upsert, in memory, before touching the DB ----
     const salePayloads: Row[] = []
     // Per-booking bookkeeping needed to build line rows once we have sale ids back.
-    const nextslotSaleMeta = new Map<string, { bookingId: string; totalCents: number; calloutFeeCents: number; isCallOut: boolean }>()
+    const nextslotSaleMeta = new Map<string, { bookingId: string; totalCents: number; calloutFeeCents: number; isCallOut: boolean; hasClientName: boolean }>()
 
     for (const booking of (bookings ?? []) as Row[]) {
       const status = booking.status as string
@@ -109,6 +109,10 @@ Deno.serve(async (req) => {
       const checkoutId = (booking.yoco_final_checkout_id || booking.yoco_checkout_id) as string | null
       const matchedYoco = checkoutId ? yocoByCheckout.get(checkoutId) : null
       const externalSaleKey = `nextslot:${bookingId}`
+      // Real client name when NextSlot has one; a booking's service names
+      // (filled in once we have line items) is a fallback further below,
+      // never left as a dead-end "Unnamed sale".
+      const clientName = (booking.client_name as string | null) || (booking.guest_name as string | null) || null
 
       salePayloads.push({
         sale_date: booking.booking_date,
@@ -120,15 +124,16 @@ Deno.serve(async (req) => {
         yoco_payment_id: matchedYoco ? (matchedYoco.id as string) : null,
         booking_id: bookingId,
         external_sale_key: externalSaleKey,
+        customer_reference: clientName,
         source_updated_at: booking.completed_at ?? booking.created_at ?? null,
         imported_at: importedAt,
         import_run_id: run.id,
         notes: isCallOut && calloutFeeCents === 0 ? 'Call-out booking; no separate call-out fee recorded.' : null,
       })
-      nextslotSaleMeta.set(externalSaleKey, { bookingId, totalCents, calloutFeeCents, isCallOut })
+      nextslotSaleMeta.set(externalSaleKey, { bookingId, totalCents, calloutFeeCents, isCallOut, hasClientName: clientName !== null })
     }
 
-    const shopSaleMeta = new Map<string, { orderId: string }>()
+    const shopSaleMeta = new Map<string, { orderId: string; hasCustomerName: boolean }>()
     for (const order of (orders ?? []) as Row[]) {
       const paymentStatus = (order.payment_status as string | null)?.toLowerCase() ?? ''
       const isPaid = paymentStatus === 'paid' || paymentStatus === 'completed'
@@ -139,6 +144,7 @@ Deno.serve(async (req) => {
       const orderId = order.id as string
       const totalCents = toCents(order.total_amount)
       const externalSaleKey = `products:${orderId}`
+      const customerName = (order.customer_name as string | null) || null
 
       salePayloads.push({
         sale_date: ((order.paid_at as string | null) ?? (order.created_at as string)).slice(0, 10),
@@ -149,11 +155,12 @@ Deno.serve(async (req) => {
         gross_amount_cents: totalCents,
         shop_order_id: orderId,
         external_sale_key: externalSaleKey,
+        customer_reference: customerName,
         source_updated_at: order.paid_at ?? order.created_at ?? null,
         imported_at: importedAt,
         import_run_id: run.id,
       })
-      shopSaleMeta.set(externalSaleKey, { orderId })
+      shopSaleMeta.set(externalSaleKey, { orderId, hasCustomerName: customerName !== null })
     }
 
     // ---- One batched upsert for every sale, then look the ids back up by key ----
@@ -174,6 +181,17 @@ Deno.serve(async (req) => {
 
     // ---- Build every line row now that we have sale ids, then one batched upsert ----
     const lineRows: Row[] = []
+    // For sales with no real client/customer name, collect their line-item
+    // names here so we can fill customer_reference with something useful
+    // (e.g. "Half Leg, Hollywood, Underarm") instead of leaving it null --
+    // that's what used to render as "Unnamed sale" even though the app had
+    // full detail on what was actually sold.
+    const fallbackNamesBySaleId = new Map<string, string[]>()
+    function addFallbackName(saleId: string, name: string) {
+      if (!fallbackNamesBySaleId.has(saleId)) fallbackNamesBySaleId.set(saleId, [])
+      const list = fallbackNamesBySaleId.get(saleId)!
+      if (!list.includes(name)) list.push(name)
+    }
 
     for (const [externalSaleKey, meta] of nextslotSaleMeta) {
       const saleId = saleIdByKey.get(externalSaleKey)
@@ -185,10 +203,12 @@ Deno.serve(async (req) => {
         const qty = Number(item.quantity ?? 1)
         const lineTotal = priceCents * qty
         serviceLinesCents += lineTotal
+        const serviceName = (item.service_name as string | null) ?? 'Service'
+        if (!meta.hasClientName) addFallbackName(saleId, serviceName)
         lineRows.push({
           sale_id: saleId,
           line_type: 'service',
-          description: item.service_name ?? 'Service',
+          description: serviceName,
           quantity: qty,
           unit_price_cents: priceCents,
           total_amount_cents: lineTotal,
@@ -236,10 +256,12 @@ Deno.serve(async (req) => {
       items.forEach((item, idx) => {
         const priceCents = toCents(item.price ?? item.unit_price)
         const qty = Number(item.quantity ?? 1)
+        const productName = (item.name as string) ?? (item.product_name as string) ?? 'Product'
+        if (!meta.hasCustomerName) addFallbackName(saleId, productName)
         lineRows.push({
           sale_id: saleId,
           line_type: 'product',
-          description: (item.name as string) ?? (item.product_name as string) ?? 'Product',
+          description: productName,
           quantity: qty,
           unit_price_cents: priceCents,
           total_amount_cents: priceCents * qty,
@@ -272,6 +294,24 @@ Deno.serve(async (req) => {
       summary.shop_lines_upserted = lineRows.filter((l) => (l.source_system as string) === 'shop_admin').length
     }
 
+    // Backfill customer_reference from line-item names for every sale that
+    // had no real client/customer name. One batched upsert keyed on id --
+    // PostgREST upsert only touches the columns present in each row, so
+    // this safely updates just customer_reference without touching
+    // anything else (learned from the earlier sequential-loop timeout bug
+    // in this same function: never do N individual round trips when one
+    // batched call will do).
+    let fallbackNamesApplied = 0
+    if (fallbackNamesBySaleId.size > 0) {
+      const nameUpdates = [...fallbackNamesBySaleId.entries()].map(([saleId, names]) => ({
+        id: saleId,
+        customer_reference: names.slice(0, 4).join(', ') + (names.length > 4 ? ', +more' : ''),
+      }))
+      const { error: nameErr } = await db.from('finance_sales').upsert(nameUpdates, { onConflict: 'id' })
+      if (nameErr) throw new Error(`Could not backfill customer_reference: ${nameErr.message}`)
+      fallbackNamesApplied = nameUpdates.length
+    }
+
     await db
       .from('finance_source_sync_runs')
       .update({
@@ -283,7 +323,7 @@ Deno.serve(async (req) => {
       })
       .eq('id', run.id)
 
-    return Response.json({ ok: true, ...summary }, { headers: corsHeaders })
+    return Response.json({ ok: true, ...summary, fallbackNamesApplied }, { headers: corsHeaders })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Sync failed.'
     await db.from('finance_source_sync_runs').update({ status: 'failed', completed_at: new Date().toISOString(), error_summary: message }).eq('id', run.id)
